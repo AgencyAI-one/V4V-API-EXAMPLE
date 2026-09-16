@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V4V Public API — tester</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#151a21; --panel2:#1b222b; --line:#28313d; --line2:#39465a;
+  --fg:#e6edf3; --dim:#8b98a8; --acc:#5aa9ff; --ok:#3fb950; --warn:#d29922; --err:#f85149; --mag:#bc8cff;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--acc)}
+button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--fg);padding:7px 12px}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#04121f;font-weight:600}
+button.ghost{background:transparent;border-color:var(--line)}
+button.sm{padding:3px 8px;font-size:12px}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select,textarea{font:inherit;background:#0b0f14;color:var(--fg);border:1px solid var(--line2);border-radius:7px;padding:7px 9px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
+textarea{font-family:var(--mono);font-size:12.5px;resize:vertical}
+code,pre{font-family:var(--mono)}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:12.5px}
+
+header{display:flex;gap:10px;align-items:center;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;z-index:20}
+header .brand{font-weight:700;letter-spacing:.3px;white-space:nowrap}
+header .brand span{color:var(--acc)}
+header .f{display:flex;align-items:center;gap:6px}
+header .f label{color:var(--dim);font-size:12px;white-space:nowrap}
+#token{width:300px;font-family:var(--mono);font-size:12px}
+#base{width:250px;font-family:var(--mono);font-size:12px}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+.chip.ok{color:var(--ok);border-color:#1f4d2a;background:#0f2a16}
+.chip.err{color:var(--err);border-color:#5c2220;background:#2a1211}
+
+.layout{display:flex;align-items:flex-start;gap:0;min-height:calc(100vh - 53px)}
+nav{width:190px;flex:0 0 190px;border-right:1px solid var(--line);padding:12px 8px;position:sticky;top:53px;background:var(--bg)}
+nav button{display:block;width:100%;text-align:left;background:transparent;border:0;padding:8px 10px;border-radius:7px;color:var(--dim)}
+nav button:hover{background:var(--panel2);color:var(--fg)}
+nav button.on{background:var(--panel2);color:var(--fg);box-shadow:inset 2px 0 0 var(--acc)}
+nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#5d6b7c;padding:12px 10px 4px}
+main{flex:1;min-width:0;padding:16px 18px 60px}
+
+.panel{display:none}.panel.on{display:block}
+h2{margin:0 0 4px;font-size:18px}
+.sub{color:var(--dim);font-size:13px;margin:0 0 14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1 1 180px;min-width:0}
+.row>.narrow{flex:0 0 150px}
+.row>.act{flex:0 0 auto}
+.fld{margin-bottom:10px}
+.fld label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
+.fld label .req{color:var(--err)}
+.fld label .ty{color:#5d6b7c;font-family:var(--mono);font-size:11px}
+.fld .hint{font-size:11.5px;color:#6f7d8e;margin-top:3px}
+.mono{font-family:var(--mono);font-size:12px}
+.meth{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;border:1px solid var(--line2)}
+.meth.GET{color:var(--ok)}.meth.POST{color:var(--warn)}.meth.DELETE{color:var(--err)}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--dim)}
+.badge.queued{color:var(--dim)}.badge.processing{color:var(--acc);border-color:#1d3f63}
+.badge.completed{color:var(--ok);border-color:#1f4d2a}.badge.failed,.badge.cancelled{color:var(--err);border-color:#5c2220}
+.s2{color:var(--ok)}.s4{color:var(--warn)}.s5,.s0{color:var(--err)}
+.muted{color:var(--dim)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.split{grid-template-columns:1fr}nav{width:150px;flex-basis:150px}}
+.list{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.item{padding:9px 11px;border-bottom:1px solid var(--line);display:flex;gap:9px;align-items:center;justify-content:space-between}
+.item:last-child{border-bottom:0}
+.item:hover{background:var(--panel2)}
+.item .t{min-width:0}
+.item .t b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .t small{color:var(--dim);font-family:var(--mono);font-size:11px}
+.out{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:460px;overflow:auto}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;margin:2px 3px 2px 0}
+.tag b{color:var(--acc);font-weight:600}
+.media{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.media img,.media video{max-width:260px;max-height:200px;border-radius:8px;border:1px solid var(--line2);background:#000}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{padding:5px 11px;font-size:12.5px}
+.tabs button.on{background:var(--panel2);border-color:var(--acc)}
+.notice{background:#12202e;border:1px solid #1d3f63;color:#b9d6f2;border-radius:8px;padding:9px 11px;font-size:12.5px;margin-bottom:12px}
+.err-box{background:#2a1211;border:1px solid #5c2220;color:#ffb3ad;border-radius:8px;padding:9px 11px;font-size:12.5px}
+details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
+.log-e{border-bottom:1px solid var(--line);padding:7px 10px}
+.log-e summary{display:flex;gap:9px;align-items:center;color:var(--fg);font-size:12.5px}
+.log-e summary .p{font-family:var(--mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.indet{height:100%;width:38%;border-radius:4px;background:linear-gradient(90deg,transparent,var(--acc),transparent);animation:indet 1.25s ease-in-out infinite}
+@keyframes indet{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line2);border-top-color:var(--acc);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">V4V <span>API</span> tester</div>
+  <div class="f"><label>Token</label><input id="token" type="password" placeholder="v4v_live_…" autocomplete="off"></div>
+  <button class="sm ghost" id="eye" title="show / hide">👁</button>
+  <div class="f"><label>API base</label><input id="base" list="basePresets" placeholder="https://your-host/api/v1" value="https://v4v.ai/api/v1" spellcheck="false">
+    <datalist id="basePresets">
+      <option value="https://v4v.ai/api/v1">
+      <option value="http://127.0.0.1:4000/api/v1">
+    </datalist></div>
+  <button class="primary sm" id="check">Check key</button>
+  <span class="chip" id="authchip">not checked</span>
+  <span class="chip" id="balchip" style="display:none"></span>
+  <span class="chip" id="basehint" style="display:none"></span>
+  <span class="chip" id="redactchip" style="display:none" title="upstream provider names are hidden in every response">redaction on</span>
+</header>
+
+<div class="layout">
+<nav>
+  <div class="grp">Discovery</div>
+  <button data-p="models" class="on">Models (LAB)</button>
+  <div class="grp">Generation</div>
+  <button data-p="lab">POST /lab</button>
+  <button data-p="studio">POST /studio</button>
+  <div class="grp">Media</div>
+  <button data-p="files">Files</button>
+  <div class="grp">Results</div>
+  <button data-p="tasks">Tasks <span id="taskcount" class="muted"></span></button>
+  <button data-p="hooks">Webhooks <span id="hookcount" class="muted"></span></button>
+  <div class="grp">Account</div>
+  <button data-p="account">Balance / Usage</button>
+  <div class="grp">Debug</div>
+  <button data-p="raw">Raw request</button>
+  <button data-p="log">Request log</button>
+</nav>
+
+<main>
+
+<!-- ───────── MODELS ───────── -->
+<section class="panel on" id="p-models">
+  <h2>LAB model catalog</h2>
+  <p class="sub"><span class="meth GET">GET</span> <code>/models</code> · <span class="meth GET">GET</span> <code>/models/{model}</code> — ids, enabled state, input/parameter schemas, defaults and limits.</p>
+  <div class="row" style="margin-bottom:12px">
+    <div class="act"><button class="primary" id="loadModels">Load models</button></div>
+    <div><input id="modelFilter" placeholder="filter by id / name / type"></div>
+    <div class="act"><label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="onlyEnabled" style="width:auto;vertical-align:-2px"> enabled only</label></div>
+  </div>
+  <div class="split">
+    <div class="card"><h3>List <span class="muted" id="modelsCount"></span></h3><div class="list" id="modelsList"><div class="item muted">click “Load models”</div></div></div>
+    <div class="card"><h3>Model details</h3><div id="modelDetail" class="muted">pick a model from the list</div></div>
+  </div>
+</section>
+
+<!-- ───────── LAB ───────── -->
+<section class="panel" id="p-lab">
+  <h2>LAB generation</h2>
+  <p class="sub"><span class="meth POST">POST</span> <code>/lab</code> — the form is built from the <code>input_schema</code> / <code>parameters_schema</code> of the selected model. A field may go in input or parameters, never both; unknown fields are rejected. Models with selectable versions expose <code>parameters.variant</code> — use the values and defaults returned by discovery. <code>project_name</code> sets the title in Projects and, for LAB, Old runs; changing it under the same Idempotency-Key is a conflict, just like changing the inputs.</p>
+  <div class="card">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">Model</label><select id="labModel"><option value="">— load the models first —</option></select></div>
+      <div class="act"><button class="ghost" id="labReload">↻ catalog</button></div>
+    </div>
+  </div>
+  <div class="tabs"><button class="on" data-labtab="form">Form</button><button data-labtab="json">Raw JSON</button></div>
+  <div id="labFormWrap">
+    <div class="split">
+      <div class="card"><h3>input</h3><div id="labInput" class="muted">pick a model</div></div>
+      <div class="card"><h3>parameters</h3><div id="labParams" class="muted">pick a model</div></div>
+    </div>
+  </div>
+  <div id="labJsonWrap" style="display:none" class="card"><h3>Request body</h3><textarea id="labJson" rows="16"></textarea></div>
+  <div class="card">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">project_name (optional)</label><input id="labProject" maxlength="200" placeholder="Summer campaign — product photo"></div>
+      <div><label class="muted" style="font-size:12px">callback_url (optional)</label><input id="labCb" placeholder="http://127.0.0.1:4010/__hook"></div>
+      <div><label class="muted" style="font-size:12px">Idempotency-Key</label><input id="labIdem" placeholder="my-key-001"></div>
+      <div class="act"><button class="ghost sm" id="labIdemGen">generate</button></div>
+      <div class="act"><button class="primary" id="labSend">Send</button></div>
+    </div>
+    <div id="labOut" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ───────── STUDIO ───────── -->
+<section class="panel" id="p-studio">
+  <h2>Studio generation</h2>
+  <p class="sub"><span class="meth POST">POST</span> <code>/studio</code> — uses the Studio workflow selected in the dashboard. Limits follow that workflow: ProVid 4–15 s, 480p/720p/1080p; OmniVid 4/6/8/10 s, 360p/720p/1080p/4k, and 9:16 or 16:9 only.</p>
+  <div class="tabs"><button class="on" data-sttab="form">Form</button><button data-sttab="json">Raw JSON</button></div>
+  <div id="stFormWrap">
+    <div class="split">
+      <div class="card"><h3>input</h3><div id="stInput"></div></div>
+      <div class="card"><h3>parameters</h3><div id="stParams"></div></div>
+    </div>
+  </div>
+  <div id="stJsonWrap" style="display:none" class="card"><h3>Request body</h3><textarea id="stJson" rows="18"></textarea></div>
+  <div class="card">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">project_name (optional)</label><input id="stProject" maxlength="200" placeholder="project title, 1–200 characters"></div>
+      <div><label class="muted" style="font-size:12px">callback_url</label><input id="stCb" placeholder="http://127.0.0.1:4010/__hook"></div>
+      <div><label class="muted" style="font-size:12px">Idempotency-Key</label><input id="stIdem"></div>
+      <div class="act"><button class="ghost sm" id="stIdemGen">generate</button></div>
+      <div class="act"><button class="primary" id="stSend">Send</button></div>
+    </div>
+    <div id="stOut" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ───────── FILES ───────── -->
+<section class="panel" id="p-files">
+  <h2>Files</h2>
+  <p class="sub"><span class="meth POST">POST</span> <code>/files</code> (multipart, field <code>file</code>, up to 100 MiB) · <span class="meth GET">GET</span> <code>/files/{id}</code>. The returned id goes into media fields with no prefix.</p>
+  <div class="card" id="drop" style="border:2px dashed var(--line2);text-align:center;padding:26px">
+    <div style="font-size:15px;margin-bottom:6px">Drop a file here</div>
+    <div class="muted" style="font-size:12.5px;margin-bottom:12px">image / video / audio</div>
+    <input type="file" id="fileInput" style="width:auto;display:inline-block">
+    <button class="primary" id="uploadBtn">Upload</button>
+    <div id="upOut" style="margin-top:12px"></div>
+  </div>
+  <div class="split">
+    <div class="card"><h3>My uploads <span class="muted" id="filesCount"></span> <button class="sm ghost" id="filesClear" style="margin-left:auto">clear</button></h3>
+      <div class="list" id="filesList"><div class="item muted">empty so far</div></div></div>
+    <div class="card"><h3>Look up by id</h3>
+      <div class="row"><div><input id="fileLookup" class="mono" placeholder="6aa962444bd1dd7ab65bc6b6"></div><div class="act"><button id="fileGet">GET</button></div></div>
+      <div id="fileOut" style="margin-top:10px"></div>
+      <p class="hint muted" style="font-size:11.5px">A missing file and another account's file return the same 404 — that is deliberate.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── TASKS ───────── -->
+<section class="panel" id="p-tasks">
+  <h2>Tasks</h2>
+  <p class="sub"><span class="meth GET">GET</span> <code>/tasks/{task_id}</code> — state is tracked solely by <code>status</code>: <code>queued</code> / <code>processing</code> → loading indicator; <code>completed</code> → files in <code>results</code>; <code>failed</code> → check <code>error</code>; <code>cancelled</code> is terminal too. Result links are signed and expire; fetch the task again to refresh them.</p>
+  <div class="card">
+    <div class="row">
+      <div><input id="taskId" class="mono" placeholder="task_6aa962444bd1dd7ab65bc6b6"></div>
+      <div class="act"><button class="primary" id="taskGet">Fetch</button></div>
+      <div class="act"><label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="autoPoll" style="width:auto;vertical-align:-2px" checked> auto-poll unfinished tasks (5 s)</label></div>
+      <div class="act"><button class="ghost sm" id="tasksClear">clear list</button></div>
+    </div>
+  </div>
+  <div id="tasksWrap"><div class="card muted">no tasks yet — submit a generation or enter a task_id</div></div>
+</section>
+
+<!-- ───────── HOOKS ───────── -->
+<section class="panel" id="p-hooks">
+  <h2>Signed callback receiver</h2>
+  <p class="sub">A local endpoint accepts <code>task.completed</code> / <code>task.failed</code> and verifies <code>X-V4V-Signature</code> = HMAC-SHA256(<code>timestamp . rawBody</code>) with your webhook signing secret.</p>
+  <div class="notice">callback_url: <code id="hookUrl" class="mono"></code> <button class="sm ghost" id="hookCopy">copy</button><br>
+  This works only if the API server can reach this machine. A hosted deployment needs a public address — put a tunnel in front of this port and use its URL.</div>
+  <div class="card">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">Webhook signing secret (for signature verification)</label><input id="hookSecret" type="password" placeholder="shown once when the API key is created"></div>
+      <div class="act"><button class="primary" id="hookSave">Save</button></div>
+      <div class="act"><button class="ghost" id="hookClear">Clear events</button></div>
+    </div>
+  </div>
+  <div id="hooksWrap"><div class="card muted">no events yet</div></div>
+</section>
+
+<!-- ───────── ACCOUNT ───────── -->
+<section class="panel" id="p-account">
+  <h2>Balance and usage</h2>
+  <p class="sub"><span class="meth GET">GET</span> <code>/balance</code> · <span class="meth GET">GET</span> <code>/usage</code> — the account's latest 100 generation requests. Neither call spends credits.</p>
+  <div class="row" style="margin-bottom:12px">
+    <div class="act"><button class="primary" id="getBalance">GET /balance</button></div>
+    <div class="act"><button class="primary" id="getUsage">GET /usage</button></div>
+  </div>
+  <div class="card"><h3>Balance</h3><div id="balOut" class="muted">—</div></div>
+  <div class="card"><h3>Usage</h3><div id="usageOut" class="muted">—</div></div>
+</section>
+
+<!-- ───────── RAW ───────── -->
+<section class="panel" id="p-raw">
+  <h2>Raw request</h2>
+  <p class="sub">For exercising error paths: 400/401/402/403/404/409/422/429.</p>
+  <div class="card">
+    <div class="row">
+      <div class="narrow"><label class="muted" style="font-size:12px">Method</label><select id="rawMethod"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></div>
+      <div><label class="muted" style="font-size:12px">Path (relative to base)</label><input id="rawPath" class="mono" value="/models"></div>
+      <div><label class="muted" style="font-size:12px">Idempotency-Key</label><input id="rawIdem"></div>
+      <div class="act"><button class="primary" id="rawSend">Send</button></div>
+    </div>
+    <div class="fld" style="margin-top:10px"><label>Body (JSON, for POST/PUT/PATCH)</label><textarea id="rawBody" rows="8"></textarea></div>
+    <div id="rawOut"></div>
+  </div>
+</section>
+
+<!-- ───────── LOG ───────── -->
+<section class="panel" id="p-log">
+  <h2>Request log</h2>
+  <p class="sub">Every call with its status, timing and a ready-to-run curl.</p>
+  <div class="row" style="margin-bottom:12px"><div class="act"><button class="ghost" id="logClear">Clear</button></div></div>
+  <div class="card" style="padding:0"><div id="logWrap"><div class="item muted">empty so far</div></div></div>
+</section>
+
+</main>
+</div>
+
+<script>
+/* ═══════════ state ═══════════ */
+const LS = 'v4v_tester_v1';
+const S = { token:'', base:'https://v4v.ai/api/v1', models:[], files:[], tasks:[], log:[] };
+function save(){ localStorage.setItem(LS, JSON.stringify({token:S.token, base:S.base, files:S.files, tasks:S.tasks.map(t=>t.task_id||t.id).filter(Boolean)})); }
+function load(){ try{ const d=JSON.parse(localStorage.getItem(LS)||'{}');
+  S.token=d.token||''; S.base=d.base||S.base; S.files=d.files||[]; (d.tasks||[]).forEach(id=>S.tasks.push({task_id:id,status:'unknown'})); }catch(e){} }
+const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
+const esc = s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtBytes = n=>!n&&n!==0?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+// plain links load directly (faster, with Range support and browser cache);
+// only redacted URLs take the local relay, so the upstream host never reaches the browser
+let REDACT_MARK = '';
+const mediaSrc = u=>!u?'':(REDACT_MARK && u.includes(REDACT_MARK) ? '/__media?u='+encodeURIComponent(u) : u);
+
+/* ═══════════ transport ═══════════ */
+async function api(method, path, opt={}){
+  const h = {'X-V4V-Token':S.token, 'X-V4V-Base':S.base};
+  let payload;
+  if(opt.form){ payload = opt.form; }
+  else if(opt.body !== undefined){ payload = typeof opt.body==='string'?opt.body:JSON.stringify(opt.body); h['Content-Type']='application/json'; }
+  if(opt.idem) h['X-V4V-Idempotency-Key'] = opt.idem;
+  const t0 = performance.now();
+  let r, text='', status=0, hdr={};
+  try{
+    r = await fetch('/__api'+path, {method, headers:h, body:payload});
+    text = await r.text();
+    status = Number(r.headers.get('X-V4V-Status')||r.status);
+    hdr = {elapsed:r.headers.get('X-V4V-Elapsed'), retryAfter:r.headers.get('Retry-After'), ctype:r.headers.get('Content-Type')};
+  }catch(e){ text = JSON.stringify({error:{code:'LOCAL_FETCH_FAILED',message:String(e)}}); status = 0; }
+  let json=null; try{ json=JSON.parse(text); }catch(e){}
+  const ms = hdr.elapsed?Number(hdr.elapsed):Math.round(performance.now()-t0);
+  addLog({method, path, status, ms, req: opt.form?'(multipart '+(opt.formName||'file')+')':payload, res:text, idem:opt.idem, retryAfter:hdr.retryAfter});
+  return {status, json, text, ms, ok: status>=200&&status<300, retryAfter:hdr.retryAfter};
+}
+function curlOf(e){
+  let c = `curl -X ${e.method} "${S.base}${e.path}" \\\n  -H "Authorization: Bearer $V4V_API_KEY"`;
+  if(e.idem) c += ` \\\n  -H 'Idempotency-Key: ${e.idem}'`;
+  if(e.req && !String(e.req).startsWith('(multipart')) c += ` \\\n  -H 'Content-Type: application/json' \\\n  -d '${String(e.req).replace(/'/g,"'\\''")}'`;
+  else if(e.req) c += ` \\\n  -F 'file=@./your-file'`;
+  return c;
+}
+function addLog(e){
+  e.at = new Date();
+  S.log.unshift(e); S.log = S.log.slice(0,300); renderLog();
+}
+function renderLog(){
+  const w = $('#logWrap');
+  if(!S.log.length){ w.innerHTML='<div class="item muted">empty so far</div>'; return; }
+  w.innerHTML = S.log.map(e=>{
+    const cls = 's'+String(e.status)[0];
+    return `<details class="log-e"><summary>
+      <span class="meth ${e.method}">${e.method}</span>
+      <span class="p">${esc(e.path)}</span>
+      <b class="${cls}">${e.status||'ERR'}</b>
+      <span class="muted">${e.ms} ms</span>
+      <span class="muted">${e.at.toLocaleTimeString()}</span></summary>
+      <div style="margin-top:8px">${e.retryAfter?`<div class="tag"><b>Retry-After</b> ${esc(e.retryAfter)}</div>`:''}
+      ${e.req?`<div class="muted" style="font-size:11px;margin:6px 0 2px">request</div><div class="out"><pre>${esc(pretty(e.req))}</pre></div>`:''}
+      <div class="muted" style="font-size:11px;margin:6px 0 2px">response</div><div class="out"><pre>${esc(pretty(e.res))}</pre></div>
+      <details style="margin-top:6px"><summary>curl</summary><div class="out"><pre>${esc(curlOf(e))}</pre></div></details>
+      </div></details>`;
+  }).join('');
+}
+function pretty(t){ try{ return JSON.stringify(JSON.parse(t),null,2); }catch(e){ return String(t??''); } }
+function resultBox(r, label){
+  const cls = r.status>=200&&r.status<300?'ok':'err';
+  const err = r.json&&r.json.error;
+  return `<div class="row" style="margin-bottom:8px"><div class="act"><span class="chip ${cls}">HTTP ${r.status||'ERR'}</span></div>
+    <div class="act"><span class="chip">${r.ms} ms</span></div>${r.retryAfter?`<div class="act"><span class="chip">Retry-After ${esc(r.retryAfter)}</span></div>`:''}
+    ${label?`<div class="act"><span class="chip">${esc(label)}</span></div>`:''}</div>
+    ${err?`<div class="err-box"><b>${esc(err.code)}</b> — ${esc(err.message)}${err.field?` <span class="mono">(${esc(err.field)})</span>`:''}</div>`:''}
+    <div class="out" style="margin-top:8px"><pre>${esc(pretty(r.text))}</pre></div>`;
+}
+
+/* ═══════════ nav ═══════════ */
+$$('nav button').forEach(b=>b.onclick=()=>{
+  $$('nav button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  $$('.panel').forEach(p=>p.classList.remove('on')); $('#p-'+b.dataset.p).classList.add('on');
+});
+
+/* ═══════════ auth bar ═══════════ */
+load();
+$('#token').value = S.token; $('#base').value = S.base;
+$('#token').oninput = e=>{ S.token=e.target.value.trim(); save(); $('#authchip').className='chip'; $('#authchip').textContent='not checked'; };
+$('#base').oninput = e=>{ S.base=e.target.value.trim(); save(); hintBase(); };
+$('#base').onchange = ()=>{ // normalise: drop the trailing slash, hint when /api/v1 is missing
+  let v = $('#base').value.trim().replace(/\/+$/,'');
+  if(v){ $('#base').value = v; S.base = v; save(); }
+  hintBase();
+};
+function hintBase(){
+  const c = $('#basehint'), v = S.base;
+  if(!v){ c.textContent=''; c.className='chip'; return; }
+  let bad = '';
+  if(!/^https?:\/\//i.test(v)) bad = 'needs an http:// or https:// scheme';
+  else if(!/\/api\/v\d/i.test(v)) bad = 'the path usually ends with /api/v1';
+  c.textContent = bad; c.className = bad?'chip err':'chip';
+  c.style.display = bad?'':'none';
+}
+$('#eye').onclick = ()=>{ const t=$('#token'); t.type = t.type==='password'?'text':'password'; };
+$('#check').onclick = async ()=>{
+  const c=$('#authchip'); c.className='chip'; c.innerHTML='<span class="spin"></span> checking';
+  const r = await api('GET','/balance');
+  if(r.ok){ c.className='chip ok'; c.textContent='key is valid';
+    const b=$('#balchip'); b.style.display=''; b.textContent='credits: '+creditsOf(r.json); }
+  else { c.className='chip err'; c.textContent = (r.json&&r.json.error&&r.json.error.code) || ('HTTP '+r.status); $('#balchip').style.display='none'; }
+};
+function creditsOf(j){ if(!j) return '—';
+  for(const k of ['credits','balance','available','available_credits','credits_available']){
+    if(typeof j[k]==='number') return j[k];
+    if(j[k]&&typeof j[k].credits==='number') return j[k].credits; }
+  return JSON.stringify(j); }
+
+/* ═══════════ schema form builder ═══════════ */
+function fieldsOf(schema){
+  if(!schema) return [];
+  if(Array.isArray(schema)) return schema.map(f=>({name:f.name||f.key||f.id, ...f}));
+  if(schema.properties){
+    const req = schema.required||[];
+    return Object.entries(schema.properties).map(([name,s])=>({name, req:req.includes(name), ...s}));
+  }
+  return Object.entries(schema).filter(([,v])=>v&&typeof v==='object').map(([name,s])=>({name, ...s}));
+}
+function typeOf(f){
+  let t = f.type;
+  if(Array.isArray(t)) t = t.find(x=>x!=='null')||t[0];
+  if(!t && f.enum) t='string';
+  if(!t && f.oneOf) t = 'string';
+  return t||'string';
+}
+function buildForm(schema, host, kind){
+  host.innerHTML='';
+  const fl = fieldsOf(schema);
+  if(!fl.length){ host.innerHTML = '<div class="muted">schema is empty — use the “Raw JSON” tab</div>'; return; }
+  fl.forEach(f=>{
+    const t = typeOf(f), id = kind+'__'+f.name;
+    const div = document.createElement('div'); div.className='fld';
+    const enumv = f.enum || (f.oneOf&&f.oneOf.every(o=>o.const!==undefined)?f.oneOf.map(o=>o.const):null);
+    let ctl;
+    if(enumv){
+      ctl = `<select id="${id}" data-name="${esc(f.name)}" data-t="${t}"><option value="">— unset —</option>`+
+        enumv.map(v=>`<option value="${esc(v)}"${f.default===v?' selected':''}>${esc(v)}</option>`).join('')+`</select>`;
+    } else if(t==='boolean'){
+      ctl = `<select id="${id}" data-name="${esc(f.name)}" data-t="boolean"><option value="">— unset —</option><option value="true"${f.default===true?' selected':''}>true</option><option value="false"${f.default===false?' selected':''}>false</option></select>`;
+    } else if(t==='integer'||t==='number'){
+      ctl = `<input id="${id}" data-name="${esc(f.name)}" data-t="${t}" type="number" ${f.minimum!==undefined?`min="${f.minimum}"`:''} ${f.maximum!==undefined?`max="${f.maximum}"`:''} ${t==='integer'?'step="1"':'step="any"'} value="${f.default??''}" placeholder="${f.minimum!==undefined?f.minimum+'…'+(f.maximum??''):''}">`;
+    } else if(t==='array'){
+      ctl = `<textarea id="${id}" data-name="${esc(f.name)}" data-t="array" rows="3" placeholder="one value per line (URL or file id)">${(f.default||[]).join('\n')}</textarea>`;
+    } else if(t==='object'){
+      ctl = `<textarea id="${id}" data-name="${esc(f.name)}" data-t="object" rows="4" placeholder="{ }">${f.default?JSON.stringify(f.default,null,2):''}</textarea>`;
+    } else if(/prompt|description|text|script/i.test(f.name) || (f.maxLength&&f.maxLength>300)){
+      ctl = `<textarea id="${id}" data-name="${esc(f.name)}" data-t="string" rows="3">${esc(f.default??'')}</textarea>`;
+    } else {
+      ctl = `<input id="${id}" data-name="${esc(f.name)}" data-t="string" value="${esc(f.default??'')}" placeholder="${esc(f.format||'')}">`;
+    }
+    const isMedia = /image|video|audio|media|avatar|url|file/i.test(f.name);
+    const lim = [f.minimum!==undefined?'min '+f.minimum:'', f.maximum!==undefined?'max '+f.maximum:'', f.maxLength?'≤'+f.maxLength+' chars':''].filter(Boolean).join(' · ');
+    div.innerHTML = `<label>${esc(f.name)}${f.req?' <span class="req">*</span>':''} <span class="ty">${t}${f.format?'/'+f.format:''}</span>
+        ${isMedia?`<button type="button" class="sm ghost pickfile" data-target="${id}" style="float:right;padding:1px 7px;font-size:11px">📎 file id</button>`:''}</label>
+      ${ctl}${f.description||lim?`<div class="hint">${esc(f.description||'')}${lim?(f.description?' · ':'')+lim:''}</div>`:''}`;
+    host.appendChild(div);
+  });
+  host.querySelectorAll('.pickfile').forEach(b=>b.onclick=()=>pickFile(b.dataset.target));
+  const raw = document.createElement('details');
+  raw.innerHTML = `<summary>show raw schema</summary><div class="out" style="margin-top:6px"><pre>${esc(JSON.stringify(schema,null,2))}</pre></div>`;
+  host.appendChild(raw);
+}
+function collectForm(host){
+  const out = {};
+  host.querySelectorAll('[data-name]').forEach(el=>{
+    const v = el.value, t = el.dataset.t, n = el.dataset.name;
+    if(v===''||v===null) return;
+    if(t==='integer') out[n]=parseInt(v,10);
+    else if(t==='number') out[n]=parseFloat(v);
+    else if(t==='boolean') out[n]= v==='true';
+    else if(t==='array') out[n]= v.split('\n').map(s=>s.trim()).filter(Boolean);
+    else if(t==='object'){ try{ out[n]=JSON.parse(v); }catch(e){ throw new Error(`Field ${n}: invalid JSON`); } }
+    else out[n]=v;
+  });
+  return out;
+}
+function pickFile(targetId){
+  if(!S.files.length){ alert('Upload a file in the Files section first.'); return; }
+  const list = S.files.map((f,i)=>`${i+1}) ${f.id}  [${f.type}, ${fmtBytes(f.size)}]`).join('\n');
+  const n = prompt('Which file should be inserted?\n\n'+list, '1');
+  const f = S.files[parseInt(n,10)-1]; if(!f) return;
+  const el = document.getElementById(targetId); if(!el) return;
+  if(el.dataset.t==='array') el.value = (el.value?el.value.replace(/\n+$/,'')+'\n':'')+f.id;
+  else el.value = f.id;
+}
+
+/* ═══════════ models ═══════════ */
+async function loadModels(){
+  $('#modelsList').innerHTML = '<div class="item muted"><span class="spin"></span> loading…</div>';
+  const r = await api('GET','/models');
+  if(!r.ok){ $('#modelsList').innerHTML = `<div class="item"><div class="err-box">${esc((r.json&&r.json.error&&r.json.error.code)||('HTTP '+r.status))}: ${esc((r.json&&r.json.error&&r.json.error.message)||r.text.slice(0,200))}</div></div>`; return; }
+  const j = r.json;
+  S.models = Array.isArray(j)?j:(j.models||j.data||j.items||j.results||[]);
+  renderModels();
+  const sel = $('#labModel');
+  sel.innerHTML = '<option value="">— pick a model —</option>' + S.models.map(m=>
+    `<option value="${esc(m.id||m.slug)}"${m.enabled===false?' disabled':''}>${esc(m.id||m.slug)} — ${esc(m.name||'')}${m.enabled===false?' (disabled)':''}</option>`).join('');
+}
+function renderModels(){
+  const q = $('#modelFilter').value.toLowerCase(), only = $('#onlyEnabled').checked;
+  const list = S.models.filter(m=>(!only||m.enabled!==false) &&
+    (!q || JSON.stringify([m.id,m.slug,m.name,m.type]).toLowerCase().includes(q)));
+  $('#modelsCount').textContent = `(${list.length}/${S.models.length})`;
+  $('#modelsList').innerHTML = list.length? list.map((m,i)=>`<div class="item">
+      <div class="t"><b>${esc(m.name||m.id)}</b><small>${esc(m.id||m.slug)} · ${esc(m.type||'')}</small></div>
+      <div style="display:flex;gap:6px;flex:0 0 auto">
+        <span class="badge ${m.enabled===false?'failed':'completed'}">${m.enabled===false?'disabled':'enabled'}</span>
+        <button class="sm ghost" data-mi="${S.models.indexOf(m)}" data-act="detail">details</button>
+        <button class="sm" data-mi="${S.models.indexOf(m)}" data-act="use">to LAB</button>
+      </div></div>`).join('') : '<div class="item muted">nothing found</div>';
+  $('#modelsList').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const m = S.models[b.dataset.mi];
+    if(b.dataset.act==='use'){ $('#labModel').value = m.id||m.slug; useModel(); $$('nav button').forEach(x=>x.classList.remove('on'));
+      document.querySelector('nav button[data-p="lab"]').classList.add('on');
+      $$('.panel').forEach(p=>p.classList.remove('on')); $('#p-lab').classList.add('on'); }
+    else showModel(m);
+  });
+}
+async function showModel(m){
+  const host = $('#modelDetail');
+  host.innerHTML = '<span class="spin"></span> fetching details…';
+  const r = await api('GET','/models/'+encodeURIComponent(m.id||m.slug));
+  const d = r.ok ? (r.json && (r.json.model||r.json.data||r.json)) : m;
+  host.innerHTML = `<div style="margin-bottom:8px"><b>${esc(d.name||d.id)}</b>
+     <span class="badge ${d.enabled===false?'failed':'completed'}">${d.enabled===false?'disabled':'enabled'}</span></div>
+    <div><span class="tag"><b>id</b> ${esc(d.id||'')}</span>${d.slug?`<span class="tag"><b>slug</b> ${esc(d.slug)}</span>`:''}<span class="tag"><b>type</b> ${esc(d.type||'')}</span></div>
+    <div style="margin-top:8px"><b style="font-size:12px">input_schema</b><div class="out" style="max-height:220px;margin-top:4px"><pre>${esc(JSON.stringify(d.input_schema||{},null,2))}</pre></div></div>
+    <div style="margin-top:8px"><b style="font-size:12px">parameters_schema</b><div class="out" style="max-height:220px;margin-top:4px"><pre>${esc(JSON.stringify(d.parameters_schema||{},null,2))}</pre></div></div>`;
+}
+$('#loadModels').onclick = loadModels;
+$('#labReload').onclick = loadModels;
+$('#modelFilter').oninput = renderModels;
+$('#onlyEnabled').onchange = renderModels;
+
+/* ═══════════ LAB ═══════════ */
+function useModel(){
+  const id = $('#labModel').value;
+  const m = S.models.find(x=>(x.id||x.slug)===id);
+  if(!m){ $('#labInput').innerHTML='<div class="muted">pick a model</div>'; $('#labParams').innerHTML='<div class="muted">pick a model</div>'; return; }
+  buildForm(m.input_schema, $('#labInput'), 'labin');
+  buildForm(m.parameters_schema, $('#labParams'), 'labpa');
+  syncLabJson();
+}
+$('#labModel').onchange = useModel;
+function labBody(){
+  const b = { model: $('#labModel').value, input: collectForm($('#labInput')) };
+  const p = collectForm($('#labParams')); if(Object.keys(p).length) b.parameters = p;
+  const pn = $('#labProject').value.trim(); if(pn) b.project_name = pn;
+  if($('#labCb').value.trim()) b.callback_url = $('#labCb').value.trim();
+  return b;
+}
+function syncLabJson(){ try{ $('#labJson').value = JSON.stringify(labBody(),null,2); }catch(e){} }
+$$('[data-labtab]').forEach(b=>b.onclick=()=>{
+  $$('[data-labtab]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  const json = b.dataset.labtab==='json';
+  if(json) syncLabJson();
+  $('#labJsonWrap').style.display = json?'':'none';
+  $('#labFormWrap').style.display = json?'none':'';
+});
+$('#labIdemGen').onclick = ()=> $('#labIdem').value = 'lab-'+Date.now().toString(36);
+$('#labSend').onclick = async ()=>{
+  let body;
+  try{
+    body = $('#labJsonWrap').style.display===''? JSON.parse($('#labJson').value) : labBody();
+  }catch(e){ $('#labOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; }
+  if(!body.model){ $('#labOut').innerHTML = '<div class="err-box">No model selected.</div>'; return; }
+  $('#labOut').innerHTML = '<span class="spin"></span> sending…';
+  const r = await api('POST','/lab',{body, idem:$('#labIdem').value.trim()||undefined});
+  $('#labOut').innerHTML = resultBox(r);
+  onSubmitted(r);
+};
+
+/* ═══════════ STUDIO ═══════════ */
+const STUDIO_INPUT = {type:'object', properties:{
+  prompt:{type:'string',maxLength:10000,description:'What to generate'},
+  product_name:{type:'string',maxLength:10000},
+  product_description:{type:'string',maxLength:10000},
+  product_images:{type:'array',description:'external URL or 24-character file id; arrays accept several'},
+  reference_images:{type:'array'}, avatar_media:{type:'array'}, audio:{type:'array',description:'OmniVid does not accept raw audio reference files in Studio'}, video:{type:'array'}}};
+const STUDIO_PARAMS = {type:'object', properties:{
+  duration:{type:'integer',minimum:4,maximum:15,description:'ProVid 4–15; OmniVid 4/6/8/10'},
+  aspect_ratio:{type:'string',enum:['9:16','16:9','1:1','4:5','4:3','3:4','21:9','adaptive']},
+  quality:{type:'string',enum:['360p','480p','720p','1080p','4k'],description:'ProVid 480p/720p/1080p; OmniVid 360p/720p/1080p/4k'},
+  avatar:{type:'string',description:'image URL or file id, or empty'},
+  style:{type:'string'}, language:{type:'string'}, voice:{type:'string'}, placement:{type:'string'}}};
+buildForm(STUDIO_INPUT, $('#stInput'), 'stin');
+buildForm(STUDIO_PARAMS, $('#stParams'), 'stpa');
+function stBody(){
+  const b = { input: collectForm($('#stInput')) };
+  const p = collectForm($('#stParams')); if(Object.keys(p).length) b.parameters = p;
+  const pn = $('#stProject').value.trim(); if(pn) b.project_name = pn;
+  if($('#stCb').value.trim()) b.callback_url = $('#stCb').value.trim();
+  return b;
+}
+$$('[data-sttab]').forEach(b=>b.onclick=()=>{
+  $$('[data-sttab]').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  const json = b.dataset.sttab==='json';
+  if(json){ try{ $('#stJson').value = JSON.stringify(stBody(),null,2); }catch(e){} }
+  $('#stJsonWrap').style.display = json?'':'none';
+  $('#stFormWrap').style.display = json?'none':'';
+});
+$('#stIdemGen').onclick = ()=> $('#stIdem').value = 'studio-'+Date.now().toString(36);
+$('#stSend').onclick = async ()=>{
+  let body;
+  try{ body = $('#stJsonWrap').style.display===''? JSON.parse($('#stJson').value) : stBody(); }
+  catch(e){ $('#stOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; }
+  $('#stOut').innerHTML = '<span class="spin"></span> sending…';
+  const r = await api('POST','/studio',{body, idem:$('#stIdem').value.trim()||undefined});
+  $('#stOut').innerHTML = resultBox(r);
+  onSubmitted(r);
+};
+function onSubmitted(r){
+  const id = r.json && r.json.task_id;
+  if(!id) return;
+  if(!S.tasks.find(t=>t.task_id===id)) S.tasks.unshift(r.json); else Object.assign(S.tasks.find(t=>t.task_id===id), r.json);
+  save(); renderTasks();
+}
+
+/* ═══════════ FILES ═══════════ */
+async function upload(file){
+  if(!file){ $('#upOut').innerHTML='<div class="err-box">No file selected.</div>'; return; }
+  const fd = new FormData(); fd.append('file', file);
+  $('#upOut').innerHTML = `<span class="spin"></span> uploading ${esc(file.name)} (${fmtBytes(file.size)})…`;
+  const r = await api('POST','/files',{form:fd, formName:file.name});
+  $('#upOut').innerHTML = resultBox(r, file.name);
+  if(r.ok && r.json && r.json.id){ S.files.unshift({...r.json, name:file.name, at:Date.now()}); save(); renderFiles(); }
+}
+$('#uploadBtn').onclick = ()=>upload($('#fileInput').files[0]);
+const drop = $('#drop');
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.style.borderColor='var(--acc)';}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.style.borderColor='var(--line2)';}));
+drop.addEventListener('drop', ev=>{ const f = ev.dataTransfer.files[0]; if(f) upload(f); });
+function renderFiles(){
+  $('#filesCount').textContent = S.files.length?`(${S.files.length})`:'';
+  $('#filesList').innerHTML = S.files.length? S.files.map((f,i)=>`<div class="item">
+      <div class="t"><b>${esc(f.name||f.id)}</b><small>${esc(f.id)} · ${esc(f.type||'')} · ${esc(f.content_type||'')} · ${fmtBytes(f.size)}</small></div>
+      <div style="flex:0 0 auto;display:flex;gap:6px">
+        <button class="sm ghost" data-fi="${i}" data-a="copy">copy id</button>
+        <button class="sm ghost" data-fi="${i}" data-a="get">GET</button></div></div>`).join('')
+    : '<div class="item muted">empty so far</div>';
+  $('#filesList').querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+    const f = S.files[b.dataset.fi];
+    if(b.dataset.a==='copy'){ navigator.clipboard.writeText(f.id); b.textContent='copied'; setTimeout(()=>b.textContent='copy id',1200); }
+    else { $('#fileLookup').value = f.id; $('#fileGet').click(); }
+  });
+}
+$('#filesClear').onclick = ()=>{ if(confirm('Clear the local list? Files stay on the server.')){ S.files=[]; save(); renderFiles(); } };
+$('#fileGet').onclick = async ()=>{
+  const id = $('#fileLookup').value.trim(); if(!id) return;
+  $('#fileOut').innerHTML = '<span class="spin"></span>';
+  const r = await api('GET','/files/'+encodeURIComponent(id));
+  $('#fileOut').innerHTML = resultBox(r);
+};
+
+/* ═══════════ TASKS ═══════════ */
+async function fetchTask(id, silent){
+  const r = await api('GET','/tasks/'+encodeURIComponent(id));
+  if(r.ok && r.json){
+    const i = S.tasks.findIndex(t=>t.task_id===id);
+    if(i>=0) S.tasks[i] = {...S.tasks[i], ...r.json}; else S.tasks.unshift(r.json);
+    save();
+  } else if(!silent){
+    const i = S.tasks.findIndex(t=>t.task_id===id);
+    const rec = {task_id:id, status:'—', _err:r};
+    if(i>=0) S.tasks[i] = {...S.tasks[i], _err:r}; else S.tasks.unshift(rec);
+  }
+  renderTasks();
+  return r;
+}
+$('#taskGet').onclick = ()=>{ const id=$('#taskId').value.trim(); if(id) fetchTask(id); };
+$('#tasksClear').onclick = ()=>{ if(confirm('Clear the local task list?')){ S.tasks=[]; save(); renderTasks(); } };
+function renderTasks(){
+  $('#taskcount').textContent = S.tasks.length?`(${S.tasks.length})`:'';
+  const w = $('#tasksWrap');
+  if(!S.tasks.length){ w.innerHTML='<div class="card muted">no tasks yet — submit a generation or enter a task_id</div>'; return; }
+  w.innerHTML = S.tasks.map((t,i)=>{
+    const st = t.status||'unknown';
+    const res = (t.results||[]).map(r=>{
+      const u = esc(mediaSrc(r.url||''));
+      const prev = r.type==='image'?`<img src="${u}" loading="lazy">`
+        : r.type==='video'?`<video src="${u}" controls preload="metadata"></video>`
+        : r.type==='audio'?`<audio src="${u}" controls style="width:260px"></audio>`:'';
+      return `<div>${prev}<div style="font-size:11px;margin-top:3px"><a href="${u}" target="_blank" rel="noopener">open</a>
+        <span class="muted">${esc(r.content_type||'')} · ${fmtBytes(r.size)}${r.expires_at?' · until '+esc(r.expires_at):''}</span></div></div>`;
+    }).join('');
+    // status alone drives the card: queued/processing → indicator, completed → results, failed → error.
+    const active = st==='queued'||st==='processing';
+    const bar = active ? `<div style="margin-top:8px">
+        <div style="font-size:11.5px;color:var(--dim);margin-bottom:3px"><b style="color:var(--fg)">${st==='queued'?'Queued…':'Generating…'}</b></div>
+        <div style="height:6px;background:#0b0f14;border:1px solid var(--line);border-radius:4px;overflow:hidden"><div class="indet"></div></div></div>` : '';
+    return `<div class="card">
+      <h3><span class="mono">${esc(t.task_id||'—')}</span> <span class="badge ${st}">${esc(st)}</span>
+        ${t.source?`<span class="tag"><b>${esc(t.source)}</b></span>`:''}
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="sm ghost" data-ti="${i}" data-a="refresh">↻ refresh</button>
+          <button class="sm ghost" data-ti="${i}" data-a="drop">✕</button></span></h3>
+      ${t.project_name?`<div style="margin:2px 0 6px;font-size:13px"><span class="muted" style="font-size:11px">project_name</span> <b>${esc(t.project_name)}</b></div>`:''}
+      <div>${t.model?`<span class="tag"><b>model</b> ${esc(t.model)}</span>`:''}
+        ${t.credits_reserved!==undefined?`<span class="tag"><b>reserved</b> ${esc(t.credits_reserved)}</span>`:''}
+        ${t.credits_used!==undefined?`<span class="tag"><b>used</b> ${esc(t.credits_used)}</span>`:''}
+        ${t.created_at?`<span class="tag"><b>created</b> ${esc(t.created_at)}</span>`:''}
+        ${t.updated_at?`<span class="tag"><b>updated</b> ${esc(t.updated_at)}</span>`:''}</div>
+      ${bar}
+      ${t.error?`<div class="err-box" style="margin-top:8px"><b>${esc(t.error.code||'')}</b> ${esc(t.error.message||'')}</div>`:''}
+      ${t._err?`<div class="err-box" style="margin-top:8px">HTTP ${t._err.status} — ${esc((t._err.json&&t._err.json.error&&t._err.json.error.message)||'')}</div>`:''}
+      ${res?`<div class="media">${res}</div>`:''}
+      <details style="margin-top:8px"><summary>raw JSON</summary><div class="out" style="margin-top:6px"><pre>${esc(JSON.stringify(t,null,2))}</pre></div></details>
+    </div>`;
+  }).join('');
+  w.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const t = S.tasks[b.dataset.ti];
+    if(b.dataset.a==='refresh') fetchTask(t.task_id);
+    else { S.tasks.splice(b.dataset.ti,1); save(); renderTasks(); }
+  });
+}
+setInterval(()=>{
+  if(!$('#autoPoll').checked || !S.token) return;
+  S.tasks.filter(t=>['queued','processing'].includes(t.status)).slice(0,3).forEach(t=>fetchTask(t.task_id,true));
+}, 5000);
+
+/* ═══════════ HOOKS ═══════════ */
+$('#hookUrl').textContent = location.origin + '/__hook';
+$('#labCb').placeholder = $('#stCb').placeholder = location.origin + '/__hook';
+$('#hookCopy').onclick = ()=>{ navigator.clipboard.writeText(location.origin+'/__hook'); $('#hookCopy').textContent='ok'; setTimeout(()=>$('#hookCopy').textContent='copy',1200); };
+$('#hookSave').onclick = async ()=>{
+  await fetch('/__config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:$('#hookSecret').value})});
+  $('#hookSave').textContent='saved'; setTimeout(()=>$('#hookSave').textContent='Save',1400);
+};
+$('#hookClear').onclick = async ()=>{ await fetch('/__events',{method:'DELETE'}); pollHooks(); };
+async function pollHooks(){
+  let d; try{ d = await (await fetch('/__events')).json(); }catch(e){ return; }
+  const ev = d.events||[];
+  $('#hookcount').textContent = ev.length?`(${ev.length})`:'';
+  const w = $('#hooksWrap');
+  w.innerHTML = ev.length? ev.map(e=>{
+    const good = e.verify==='valid';
+    return `<div class="card"><h3>
+        <span class="badge ${good?'completed':(e.verify.startsWith('no secret')?'':'failed')}">${esc(e.verify)}</span>
+        <span class="mono muted">${new Date(e.at*1000).toLocaleTimeString()}</span>
+        ${e.json&&e.json.event?`<span class="tag"><b>${esc(e.json.event)}</b></span>`:''}
+        ${e.json&&e.json.event_id?`<span class="tag"><b>event_id</b> ${esc(e.json.event_id)}</span>`:''}</h3>
+      <div><span class="tag"><b>X-V4V-Timestamp</b> ${esc(e.headers['X-V4V-Timestamp']||'—')}</span>
+        <span class="tag"><b>X-V4V-Signature</b> ${esc((e.headers['X-V4V-Signature']||'—').slice(0,22))}…</span></div>
+      <div class="out" style="margin-top:8px;max-height:260px"><pre>${esc(e.json?JSON.stringify(e.json,null,2):e.raw)}</pre></div></div>`;
+  }).join('') : '<div class="card muted">no events yet</div>';
+}
+setInterval(pollHooks, 3000); pollHooks();
+
+/* ═══════════ ACCOUNT ═══════════ */
+$('#getBalance').onclick = async ()=>{
+  $('#balOut').innerHTML='<span class="spin"></span>';
+  const r = await api('GET','/balance');
+  $('#balOut').innerHTML = resultBox(r);
+  if(r.ok){ const b=$('#balchip'); b.style.display=''; b.textContent='credits: '+creditsOf(r.json); }
+};
+$('#getUsage').onclick = async ()=>{
+  $('#usageOut').innerHTML='<span class="spin"></span>';
+  const r = await api('GET','/usage');
+  const rows = r.ok ? (Array.isArray(r.json)?r.json:(r.json.usage||r.json.items||r.json.data||r.json.requests||[])) : [];
+  let tbl='';
+  if(rows.length && typeof rows[0]==='object'){
+    const cols = [...new Set(rows.flatMap(o=>Object.keys(o)))].slice(0,9);
+    tbl = `<div style="overflow-x:auto"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0,100).map(o=>`<tr>${cols.map(c=>`<td class="mono">${esc(typeof o[c]==='object'?JSON.stringify(o[c]):o[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  $('#usageOut').innerHTML = resultBox(r) + tbl;
+};
+
+/* ═══════════ RAW ═══════════ */
+$('#rawSend').onclick = async ()=>{
+  const m = $('#rawMethod').value, p = $('#rawPath').value.trim() || '/';
+  let body;
+  if(['POST','PUT','PATCH'].includes(m) && $('#rawBody').value.trim()){
+    try{ body = JSON.parse($('#rawBody').value); }
+    catch(e){ $('#rawOut').innerHTML = `<div class="err-box">Invalid JSON: ${esc(e.message)}</div>`; return; }
+  }
+  $('#rawOut').innerHTML='<span class="spin"></span>';
+  const r = await api(m, p.startsWith('/')?p:'/'+p, {body, idem:$('#rawIdem').value.trim()||undefined});
+  $('#rawOut').innerHTML = resultBox(r);
+};
+$('#logClear').onclick = ()=>{ S.log=[]; renderLog(); };
+
+/* ═══════════ init ═══════════ */
+renderFiles(); renderTasks(); renderLog();
+fetch('/__config').then(r=>r.json()).then(c=>{ if(c.base && !localStorage.getItem(LS)){ S.base=c.base; $('#base').value=c.base; }
+  if(c.secret_set) $('#hookSecret').placeholder='secret already stored';
+  if(c.redact) $('#redactchip').style.display='';
+  REDACT_MARK = c.redact_as||''; renderTasks(); }).catch(()=>{});
+hintBase();
+if(S.token && S.base) $('#check').click();
+</script>
+</body>
+</html>
