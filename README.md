@@ -51,8 +51,8 @@ you trust.
 | LAB | `POST /lab` — form generated from the selected model's own schemas (camelCase field names preserved), `project_name`, `Idempotency-Key`, raw-JSON tab |
 | Studio | `POST /studio` — every documented input and parameter, with the ProVid/OmniVid limits shown inline |
 | Studio bulk | `POST /studio/batches` — `name`, `max_credits`, optional `test_count: 5`, shared `input` / `parameters` (same form as Studio), an item editor (`sku`, `product_id`, `product_url`, per-item `input` / `parameters` overrides, paste many `SKU, URL-or-id` lines at once), body size against the 1 MiB limit, required `Idempotency-Key`, raw-JSON tab |
-| Batches | `GET /studio/batches` (paged list), `GET /studio/batches/{batch_id}` (item progress paged by `offset` / `limit` ≤ 100, counts, credits used / committed / budget, `waiting_reason`, per-attempt status, errors and result previews), `POST /studio/batches/{batch_id}` `pause` / `resume` (+ higher `max_credits`) / `cancel`, auto-refresh every 5 s while the batch runs, and a button that sends an attempt to Tasks |
-| Batch recovery | `retry_failed` (optional `item_indexes`, ranges like `4-7`), `rework` (per-item `index` + `product_id` / `product_url` / `input` / `parameters`), `restart` (all items, with a confirm), operation-wide `input` / `parameters` and a higher `max_credits`, a per-operation `Idempotency-Key` with one-click "replay last" to check idempotent replays, ↻ retry / ✎ rework shortcuts on each item row, raw-JSON tab, item `version` with earlier attempts kept and dimmed, and explanations for `BATCH_ITEMS_ACTIVE`, `GENERATION_UNRESOLVED`, `NO_FAILED_ITEMS`, `IDEMPOTENCY_CONFLICT`, `BATCH_HISTORY_LIMIT` and the item errors `IMPORT_FAILED` / `PREPARATION_FAILED` / `DIRECTOR_REQUEST_FAILED` / `REFERENCE_MEDIA_UNAVAILABLE` |
+| Batches | `GET /studio/batches` (paged list), `GET /studio/batches/{batch_id}` (item progress paged by `offset` / `limit` ≤ 100, counts, credits used / committed / budget, `waiting_reason`, per-attempt status, errors and result previews, as a table or a **Results** grid of each item's current output), `POST /studio/batches/{batch_id}` `pause` / `resume` (+ higher `max_credits`) / `cancel`, auto-refresh every 5 s while the batch runs, and a button that sends an attempt to Tasks |
+| Batch recovery | `retry_failed` (optional `item_indexes`, ranges like `4-7`), `rework` (each item named by `index` or by its current `task_id`, + `product_id` / `product_url` / `input` / `parameters`), tick the results you don't like in the table or the grid and **Rework selected** sends them by `task_id`, `restart` (all items, with a confirm), operation-wide `input` / `parameters` and a higher `max_credits`, a per-operation `Idempotency-Key` with one-click "replay last" to check idempotent replays, ↻ retry / ✎ rework shortcuts on each item row, raw-JSON tab, item `version` with earlier attempts kept and dimmed, and explanations for `BATCH_ITEMS_ACTIVE`, `GENERATION_UNRESOLVED`, `NO_FAILED_ITEMS`, `IDEMPOTENCY_CONFLICT`, `BATCH_HISTORY_LIMIT`, `BATCH_ITEM_VERSION_CHANGED`, `TASK_NOT_FOUND` and the item errors `IMPORT_FAILED` / `PREPARATION_FAILED` / `DIRECTOR_REQUEST_FAILED` / `REFERENCE_MEDIA_UNAVAILABLE` |
 | Files | `POST /files` (drag & drop, multipart), `GET /files/{id}`, a local library of uploaded ids with a 📎 button that inserts one into any media field |
 | Tasks | `GET /tasks/{task_id}`, auto-polling every 5 s, inline preview of image/video/audio results, `credits_reserved` / `credits_used`, `expires_at` |
 | Callbacks | a built-in receiver that verifies `X-V4V-Signature` and timestamp freshness |
@@ -127,6 +127,12 @@ Redaction is off unless you pass `--redact`.
   `credits_used` counts every version. `counts`, item `status` and `version` describe the latest version only. A cancelled
   batch can't resume but can restart or rework. A deployment without this release rejects these actions with
   422 `action must be pause, resume or cancel`.
+- Remaking results you dislike: each item reports its current version as `items[].task_id`, `results` and `error`.
+  Send those task ids in a `rework` (`items: [{"task_id": "task_…"}]`, no other fields reruns the same brief). Their
+  current results clear at once and the batch runs again, other items keep theirs, and older output stays in
+  `attempts`. A task id that was already replaced gets 409 `BATCH_ITEM_VERSION_CHANGED` rather than remaking the newer
+  result; one from another batch gets 404 `TASK_NOT_FOUND`. Each entry takes exactly one of `index` or `task_id`. On a
+  deployment that does not report `items[].task_id`, the tester sends the selection by `index` instead.
 
 ## Contributing
 
