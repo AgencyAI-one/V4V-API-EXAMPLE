@@ -2,7 +2,8 @@
 
 A local, dependency-free web console for exercising the [V4V Public API](https://v4v.ai/developers) by hand:
 discover models, build a request from the model's own schema, upload media, submit LAB and Studio
-generations, watch tasks, preview results, and verify signed callbacks.
+generations, run Studio bulk batches (and retry, rework or restart their items), watch tasks, preview
+results, and verify signed callbacks.
 
 Everything runs on your machine. Nothing is uploaded anywhere except the API you point it at.
 
@@ -49,6 +50,9 @@ you trust.
 | Models | `GET /models`, `GET /models/{model}` — filter, enabled state, raw `input_schema` / `parameters_schema` |
 | LAB | `POST /lab` — form generated from the selected model's own schemas (camelCase field names preserved), `project_name`, `Idempotency-Key`, raw-JSON tab |
 | Studio | `POST /studio` — every documented input and parameter, with the ProVid/OmniVid limits shown inline |
+| Studio bulk | `POST /studio/batches` — `name`, `max_credits`, optional `test_count: 5`, shared `input` / `parameters` (same form as Studio), an item editor (`sku`, `product_id`, `product_url`, per-item `input` / `parameters` overrides, paste many `SKU, URL-or-id` lines at once), body size against the 1 MiB limit, required `Idempotency-Key`, raw-JSON tab |
+| Batches | `GET /studio/batches` (paged list), `GET /studio/batches/{batch_id}` (item progress paged by `offset` / `limit` ≤ 100, counts, credits used / committed / budget, `waiting_reason`, per-attempt status, errors and result previews), `POST /studio/batches/{batch_id}` `pause` / `resume` (+ higher `max_credits`) / `cancel`, auto-refresh every 5 s while the batch runs, and a button that sends an attempt to Tasks |
+| Batch recovery | `retry_failed` (optional `item_indexes`, ranges like `4-7`), `rework` (per-item `index` + `product_id` / `product_url` / `input` / `parameters`), `restart` (all items, with a confirm), operation-wide `input` / `parameters` and a higher `max_credits`, a per-operation `Idempotency-Key` with one-click "replay last" to check idempotent replays, ↻ retry / ✎ rework shortcuts on each item row, raw-JSON tab, item `version` with earlier attempts kept and dimmed, and explanations for `BATCH_ITEMS_ACTIVE`, `GENERATION_UNRESOLVED`, `NO_FAILED_ITEMS`, `IDEMPOTENCY_CONFLICT`, `BATCH_HISTORY_LIMIT` and the item errors `IMPORT_FAILED` / `PREPARATION_FAILED` / `DIRECTOR_REQUEST_FAILED` / `REFERENCE_MEDIA_UNAVAILABLE` |
 | Files | `POST /files` (drag & drop, multipart), `GET /files/{id}`, a local library of uploaded ids with a 📎 button that inserts one into any media field |
 | Tasks | `GET /tasks/{task_id}`, auto-polling every 5 s, inline preview of image/video/audio results, `credits_reserved` / `credits_used`, `expires_at` |
 | Callbacks | a built-in receiver that verifies `X-V4V-Signature` and timestamp freshness |
@@ -96,7 +100,7 @@ Redaction is off unless you pass `--redact`.
 | Path | Purpose |
 |---|---|
 | `/` | the UI |
-| `/__api/*` | proxy to `<base>/*` |
+| `/__api/*` | proxy to `<base>/*`, query string included |
 | `/__hook` | callback receiver |
 | `/__events` | received callbacks (`DELETE` clears) |
 | `/__config` | API base, webhook secret, redaction state |
@@ -112,6 +116,17 @@ Redaction is off unless you pass `--redact`.
 - Default limits: 120 requests/min per key, 10 generation submissions/min and 3 concurrent generations
   per account. Rate-limited responses carry `Retry-After`.
 - Result links are signed and expire; fetching the task again renews them.
+- Bulk: acceptance reserves nothing; each item's estimate is held when it is admitted, and spent plus held
+  credits never exceed `max_credits`. `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` pause the batch, and topping
+  up does not resume it — call `resume`. With `test_count: 5` the batch pauses with `TEST_REVIEW_REQUIRED`
+  after the sample settles, and the held items show `waiting_for_sample`. A `completed` batch can contain
+  failed items. Poll no more often than every 5 s.
+- Batch recovery: `resume` never retries failures. `retry_failed`, `rework` and `restart` each add a new, paid attempt
+  version to the same batch and need a **new** `Idempotency-Key` per operation. Reuse the key with the identical body only
+  after a network error. Selected items must be terminal. `max_credits` stays cumulative across all versions, and
+  `credits_used` counts every version. `counts`, item `status` and `version` describe the latest version only. A cancelled
+  batch can't resume but can restart or rework. A deployment without this release rejects these actions with
+  422 `action must be pause, resume or cancel`.
 
 ## Contributing
 

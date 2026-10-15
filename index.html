@@ -35,6 +35,9 @@ header .f label{color:var(--dim);font-size:12px;white-space:nowrap}
 .chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
 .chip.ok{color:var(--ok);border-color:#1f4d2a;background:#0f2a16}
 .chip.err{color:var(--err);border-color:#5c2220;background:#2a1211}
+.chip.warn{color:var(--warn);border-color:#5a4512;background:#2a210b}
+button.danger{color:var(--err);border-color:#5c2220}
+button.danger:hover{border-color:var(--err)}
 
 .layout{display:flex;align-items:flex-start;gap:0;min-height:calc(100vh - 53px)}
 nav{width:190px;flex:0 0 190px;border-right:1px solid var(--line);padding:12px 8px;position:sticky;top:53px;background:var(--bg)}
@@ -64,6 +67,15 @@ h2{margin:0 0 4px;font-size:18px}
 .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--dim)}
 .badge.queued{color:var(--dim)}.badge.processing{color:var(--acc);border-color:#1d3f63}
 .badge.completed{color:var(--ok);border-color:#1f4d2a}.badge.failed,.badge.cancelled{color:var(--err);border-color:#5c2220}
+.badge.running{color:var(--acc);border-color:#1d3f63}.badge.paused,.badge.waiting_for_sample{color:var(--warn);border-color:#5a4512}
+.bar{height:8px;background:#0b0f14;border:1px solid var(--line);border-radius:4px;overflow:hidden;display:flex}
+.bar>i{display:block;height:100%}
+.bk-it{border-bottom:1px solid var(--line);padding:8px 0}
+.bk-it:last-child{border-bottom:0}
+.bk-it .ix{flex:0 0 34px;color:var(--dim);font-family:var(--mono);font-size:12px;padding-bottom:8px}
+.thumb img,.thumb video{max-width:150px;max-height:100px;border-radius:6px;border:1px solid var(--line2);background:#000;display:block}
+td .att{padding:4px 0;border-bottom:1px dashed var(--line)}
+td .att:last-child{border-bottom:0}
 .s2{color:var(--ok)}.s4{color:var(--warn)}.s5,.s0{color:var(--err)}
 .muted{color:var(--dim)}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -123,10 +135,12 @@ details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
   <div class="grp">Generation</div>
   <button data-p="lab">POST /lab</button>
   <button data-p="studio">POST /studio</button>
+  <button data-p="bulk">POST /studio/batches</button>
   <div class="grp">Media</div>
   <button data-p="files">Files</button>
   <div class="grp">Results</div>
   <button data-p="tasks">Tasks <span id="taskcount" class="muted"></span></button>
+  <button data-p="batches">Batches <span id="batchchip" class="muted"></span></button>
   <button data-p="hooks">Webhooks <span id="hookcount" class="muted"></span></button>
   <div class="grp">Account</div>
   <button data-p="account">Balance / Usage</button>
@@ -203,6 +217,128 @@ details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
       <div class="act"><button class="primary" id="stSend">Send</button></div>
     </div>
     <div id="stOut" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ───────── STUDIO BULK ───────── -->
+<section class="panel" id="p-bulk">
+  <h2>Studio bulk generation</h2>
+  <p class="sub"><span class="meth POST">POST</span> <code>/studio/batches</code> — up to 300 products in one JSON request (body ≤ 1 MiB). Each item becomes its own Studio workflow with its own task, results and credit accounting; an invalid item fails on its own while the rest continue. Field names are the same as for <code>POST /studio</code>; override precedence is item → batch → Studio defaults. If an item has both <code>product_id</code> and <code>product_url</code>, the library product wins, and fields set explicitly in <code>input</code> override imported values.</p>
+  <div class="notice">Bulk shares the server generation queue with ordinary requests, which go first. By default one bulk workflow runs per account at a time, and all of an account's batches share that slot. Acceptance reserves nothing. Each item's estimate is held only when that item is admitted to start, and <code>max_credits</code> caps spent plus held credits. Items can show an empty <code>attempts</code> array until the next worker tick.</div>
+  <div class="card" id="bkHead">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">name <span style="color:var(--err)">*</span></label><input id="bkName" maxlength="200" placeholder="Autumn catalogue"></div>
+      <div class="narrow"><label class="muted" style="font-size:12px">max_credits <span style="color:var(--err)">*</span></label><input id="bkMax" type="number" min="0" step="any" placeholder="500"></div>
+      <div class="act"><label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="bkTest" style="width:auto;vertical-align:-2px"> <code>test_count: 5</code> — run a 5-item sample, then wait for resume</label></div>
+      <div class="act"><button class="ghost sm" id="bkExample" title="the request from the API docs">fill docs example</button></div>
+    </div>
+  </div>
+  <div class="tabs"><button class="on" data-bktab="form">Form</button><button data-bktab="json">Raw JSON</button></div>
+  <div id="bkFormWrap">
+    <div class="split">
+      <div class="card"><h3>input <span class="muted" style="font-weight:400;font-size:12px">shared by every item</span></h3><div id="bkInput"></div></div>
+      <div class="card"><h3>parameters <span class="muted" style="font-weight:400;font-size:12px">shared by every item</span></h3><div id="bkParams"></div></div>
+    </div>
+    <div class="card">
+      <h3>items <span class="muted" id="bkCount"></span>
+        <span style="margin-left:auto;display:flex;gap:6px"><button class="sm" id="bkAdd">+ item</button><button class="sm ghost" id="bkClearItems">clear</button></span></h3>
+      <div class="hint muted" style="font-size:11.5px;margin-bottom:6px">Each item needs a product library <code>product_id</code>, a public <code>product_url</code> to import, or product data and images in its <code>input</code> override. Stores that need an interactive browser or a security check won't import.</div>
+      <div id="bkItems"></div>
+      <details style="margin-top:10px"><summary>paste many items at once</summary>
+        <div class="hint muted" style="font-size:11.5px;margin:6px 0">One product per line: <code>SKU, product URL or 24-character product_id</code>. The SKU is optional, so a line can be just the URL or the id. Tabs and semicolons work as separators too.</div>
+        <textarea id="bkPaste" rows="5" placeholder="MUG-01, 0123456789abcdef01234567&#10;BAG-02, https://shop.example/products/bag?variant=blue&#10;https://shop.example/products/lamp"></textarea>
+        <div style="margin-top:6px"><button class="sm" id="bkPasteAdd">add lines</button></div>
+      </details>
+    </div>
+  </div>
+  <div id="bkJsonWrap" style="display:none" class="card"><h3>Request body</h3><textarea id="bkJson" rows="22"></textarea></div>
+  <div class="card">
+    <div class="row">
+      <div><label class="muted" style="font-size:12px">Idempotency-Key <span style="color:var(--err)">*</span></label><input id="bkIdem" placeholder="autumn-catalogue-001"></div>
+      <div class="act"><button class="ghost sm" id="bkIdemGen">generate</button></div>
+      <div class="act"><span class="chip" id="bkSize">0 B / 1 MiB</span></div>
+      <div class="act"><button class="primary" id="bkSend">Create batch</button></div>
+    </div>
+    <div class="hint muted" style="font-size:11.5px;margin-top:6px">Required (1–200 characters). If you leave it empty, one is generated. The same key with identical JSON returns the same batch, so retries are safe. A changed body under that key returns 409 <code>IDEMPOTENCY_CONFLICT</code>.</div>
+    <div id="bkOut" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ───────── BATCHES ───────── -->
+<section class="panel" id="p-batches">
+  <h2>Batches</h2>
+  <p class="sub"><span class="meth GET">GET</span> <code>/studio/batches?offset&amp;limit</code> — this account's batches, newest first · <span class="meth GET">GET</span> <code>/studio/batches/{batch_id}?offset&amp;limit</code> — item progress, paged by zero-based item index (limit ≤ 100) · <span class="meth POST">POST</span> <code>/studio/batches/{batch_id}</code> — <code>pause</code> / <code>resume</code> (+ a higher <code>max_credits</code>) / <code>cancel</code>, and the paid <code>retry_failed</code> / <code>rework</code> / <code>restart</code>, which add new attempt versions to the same batch. A batch reports <code>completed</code> once the latest version of every item is terminal, and completed batches can still contain failed items.</p>
+  <div class="split">
+    <div class="card"><h3>Account batches <span class="muted" id="blCount"></span></h3>
+      <div class="row" style="margin-bottom:10px">
+        <div class="narrow" style="flex-basis:90px"><label class="muted" style="font-size:12px">offset</label><input id="blOff" type="number" min="0" value="0"></div>
+        <div class="narrow" style="flex-basis:90px"><label class="muted" style="font-size:12px">limit</label><input id="blLim" type="number" min="1" max="100" value="50"></div>
+        <div class="act"><button class="primary" id="blLoad">Load</button></div>
+      </div>
+      <div class="list" id="blList" style="max-height:300px"><div class="item muted">click “Load”</div></div>
+    </div>
+    <div class="card"><h3>Open a batch</h3>
+      <div class="row">
+        <div><label class="muted" style="font-size:12px">batch_id</label><input id="bdId" class="mono" placeholder="batch_6aa962444bd1dd7ab65bc6b6"></div>
+        <div class="narrow" style="flex-basis:80px"><label class="muted" style="font-size:12px">offset</label><input id="bdOff" type="number" min="0" value="0"></div>
+        <div class="narrow" style="flex-basis:80px"><label class="muted" style="font-size:12px">limit</label><input id="bdLim" type="number" min="1" max="100" value="50"></div>
+        <div class="act"><button class="primary" id="bdGet">Fetch</button></div>
+      </div>
+      <div style="margin-top:10px"><label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="bdPoll" style="width:auto;vertical-align:-2px" checked> refresh every 5 s while the batch is running or attempts are processing</label></div>
+      <p class="hint muted" style="font-size:11.5px;margin:8px 0 0">The docs ask for no more than one poll every five seconds. A completed attempt carries signed result links; open it in Tasks (or GET <code>/tasks/{task_id}</code>) to renew them once they expire.</p>
+    </div>
+  </div>
+  <div id="bdEmpty"><div class="card muted">no batch open yet. Create one, or pick one from the list.</div></div>
+  <div id="bdWrap" style="display:none">
+    <div class="card">
+      <div id="bdHead"></div>
+      <div class="row" style="margin-top:14px">
+        <div class="act"><button id="bcPause" data-ctl="pause">Pause</button></div>
+        <div class="narrow" style="flex-basis:220px"><input id="bcMax" type="number" min="0" step="any" placeholder="max_credits (optional)" title="optional: raise the budget when resuming"></div>
+        <div class="act"><button id="bcResume" data-ctl="resume">Resume</button></div>
+        <div class="act"><button id="bcCancel" data-ctl="cancel" class="danger">Cancel batch</button></div>
+      </div>
+      <div class="hint muted" style="font-size:11.5px;margin-top:6px">Pause and cancel stop future starts. Attempts that were already admitted keep their reservations and finish. Resume continues after a sample, a top-up or a budget increase, and the budget can only go up. Cancel stops the remaining items. A cancelled batch can't resume, but it can still restart or rework terminal items (below). Controls are idempotent while the batch state is unchanged. Resume never retries failed attempts.</div>
+      <div id="bcOut" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="raCard">
+      <h3>New attempts <span class="muted" style="font-weight:400;font-size:12px">paid · each operation needs a new <code>Idempotency-Key</code></span>
+        <span class="tabs" style="margin:0 0 0 auto"><button class="sm on" data-ramode="form">Form</button><button class="sm" data-ramode="json">Raw JSON</button></span></h3>
+      <div class="tabs" id="raTabs"><button class="on" data-ra="retry_failed">retry_failed</button><button data-ra="rework">rework</button><button data-ra="restart">restart</button></div>
+      <div class="notice" id="raHelp"></div>
+      <div id="raForm">
+        <div id="raRetry" class="fld">
+          <label>item_indexes <span class="ty">zero-based · optional</span></label>
+          <input id="raIdx" class="mono" placeholder="empty = every item whose latest attempt failed · e.g. 1, 4, 7-9">
+          <div class="hint" id="raFailed"></div>
+        </div>
+        <div id="raRework" class="fld" style="display:none">
+          <label>items <span class="ty">1–300 · index required</span>
+            <button type="button" class="sm ghost" id="raAddRow" style="float:right;padding:1px 7px;font-size:11px">+ item</button></label>
+          <div id="raRows"></div>
+          <div class="hint">Empty fields keep the item's previous request. Setting <code>product_id</code> clears the old <code>product_url</code>, and the other way round. Item <code>input</code> / <code>parameters</code> win over the operation-wide changes below.</div>
+        </div>
+        <div class="split">
+          <div class="fld"><label>input <span class="ty">object · optional, every selected item</span></label><textarea id="raInput" rows="3" placeholder='{ "prompt": "A slow close-up of the details" }'></textarea></div>
+          <div class="fld"><label>parameters <span class="ty">object · optional, every selected item</span></label><textarea id="raParams" rows="3" placeholder='{ "duration": 8 }'></textarea></div>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <div class="narrow" style="flex-basis:220px"><label class="muted" style="font-size:12px">max_credits <span class="ty">optional, cumulative</span></label><input id="raMax" type="number" min="0" step="any"></div>
+        </div>
+      </div>
+      <div id="raJsonWrap" style="display:none" class="fld"><textarea id="raJson" rows="12"></textarea></div>
+      <div class="row">
+        <div><label class="muted" style="font-size:12px">Idempotency-Key <span style="color:var(--err)">*</span></label><input id="raIdem" placeholder="generated on send if empty"></div>
+        <div class="act"><button class="ghost sm" id="raIdemGen">new key</button></div>
+        <div class="act"><span class="chip" id="raSize">0 B / 1 MiB</span></div>
+        <div class="act"><button class="primary" id="raSend">Send retry_failed</button></div>
+        <div class="act"><button class="ghost" id="raReplay" disabled title="send the last accepted operation again with the same key and body. The API returns the batch without starting extra attempts">replay last</button></div>
+      </div>
+      <div class="hint muted" style="font-size:11.5px;margin-top:6px">A key belongs to one operation on this batch. After a network error, send the same key and body again (safe). After a success the field clears, so the next operation gets a new key. The same key with a changed body returns 409 <code>IDEMPOTENCY_CONFLICT</code>.</div>
+      <div id="raOut" style="margin-top:10px"></div>
+    </div>
+    <div class="card" id="bdItems"></div>
+    <details class="card"><summary>raw JSON of this page</summary><div class="out" style="margin-top:6px"><pre id="bdRaw"></pre></div></details>
   </div>
 </section>
 
@@ -301,10 +437,10 @@ details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
 <script>
 /* ═══════════ state ═══════════ */
 const LS = 'v4v_tester_v1';
-const S = { token:'', base:'https://v4v.ai/api/v1', models:[], files:[], tasks:[], log:[] };
-function save(){ localStorage.setItem(LS, JSON.stringify({token:S.token, base:S.base, files:S.files, tasks:S.tasks.map(t=>t.task_id||t.id).filter(Boolean)})); }
+const S = { token:'', base:'https://v4v.ai/api/v1', models:[], files:[], tasks:[], log:[], batchId:'', batch:null };
+function save(){ localStorage.setItem(LS, JSON.stringify({token:S.token, base:S.base, files:S.files, tasks:S.tasks.map(t=>t.task_id||t.id).filter(Boolean), batch:S.batchId})); }
 function load(){ try{ const d=JSON.parse(localStorage.getItem(LS)||'{}');
-  S.token=d.token||''; S.base=d.base||S.base; S.files=d.files||[]; (d.tasks||[]).forEach(id=>S.tasks.push({task_id:id,status:'unknown'})); }catch(e){} }
+  S.token=d.token||''; S.base=d.base||S.base; S.files=d.files||[]; S.batchId=d.batch||''; (d.tasks||[]).forEach(id=>S.tasks.push({task_id:id,status:'unknown'})); }catch(e){} }
 const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
 const esc = s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtBytes = n=>!n&&n!==0?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
@@ -374,10 +510,11 @@ function resultBox(r, label){
 }
 
 /* ═══════════ nav ═══════════ */
-$$('nav button').forEach(b=>b.onclick=()=>{
-  $$('nav button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-  $$('.panel').forEach(p=>p.classList.remove('on')); $('#p-'+b.dataset.p).classList.add('on');
-});
+function showPanel(name){
+  $$('nav button').forEach(x=>x.classList.toggle('on', x.dataset.p===name));
+  $$('.panel').forEach(p=>p.classList.toggle('on', p.id==='p-'+name));
+}
+$$('nav button').forEach(b=>b.onclick=()=>showPanel(b.dataset.p));
 
 /* ═══════════ auth bar ═══════════ */
 load();
@@ -480,11 +617,14 @@ function collectForm(host){
   });
   return out;
 }
-function pickFile(targetId){
-  if(!S.files.length){ alert('Upload a file in the Files section first.'); return; }
+function chooseFile(){
+  if(!S.files.length){ alert('Upload a file in the Files section first.'); return null; }
   const list = S.files.map((f,i)=>`${i+1}) ${f.id}  [${f.type}, ${fmtBytes(f.size)}]`).join('\n');
   const n = prompt('Which file should be inserted?\n\n'+list, '1');
-  const f = S.files[parseInt(n,10)-1]; if(!f) return;
+  return S.files[parseInt(n,10)-1] || null;
+}
+function pickFile(targetId){
+  const f = chooseFile(); if(!f) return;
   const el = document.getElementById(targetId); if(!el) return;
   if(el.dataset.t==='array') el.value = (el.value?el.value.replace(/\n+$/,'')+'\n':'')+f.id;
   else el.value = f.id;
@@ -516,9 +656,7 @@ function renderModels(){
       </div></div>`).join('') : '<div class="item muted">nothing found</div>';
   $('#modelsList').querySelectorAll('button').forEach(b=>b.onclick=()=>{
     const m = S.models[b.dataset.mi];
-    if(b.dataset.act==='use'){ $('#labModel').value = m.id||m.slug; useModel(); $$('nav button').forEach(x=>x.classList.remove('on'));
-      document.querySelector('nav button[data-p="lab"]').classList.add('on');
-      $$('.panel').forEach(p=>p.classList.remove('on')); $('#p-lab').classList.add('on'); }
+    if(b.dataset.act==='use'){ $('#labModel').value = m.id||m.slug; useModel(); showPanel('lab'); }
     else showModel(m);
   });
 }
@@ -622,6 +760,500 @@ function onSubmitted(r){
   save(); renderTasks();
 }
 
+/* ═══════════ STUDIO BULK — create ═══════════ */
+buildForm(STUDIO_INPUT, $('#bkInput'), 'bkin');
+buildForm(STUDIO_PARAMS, $('#bkParams'), 'bkpa');
+const BK_MAX_ITEMS = 300, BK_MAX_BODY = 1048576;
+const blankItem = ()=>({sku:'', product_id:'', product_url:'', input:'', parameters:'', open:false});
+const itemUsed = it=>['sku','product_id','product_url','input','parameters'].some(k=>it[k].trim());
+const isHexId = v=>/^[a-f\d]{24}$/i.test(v);
+let BK = [blankItem()];
+
+function renderBkItems(){
+  $('#bkItems').innerHTML = BK.map((it,i)=>`<div class="bk-it" data-i="${i}">
+    <div class="row">
+      <div class="ix">#${i}</div>
+      <div class="narrow"><input data-k="sku" maxlength="200" placeholder="sku" value="${esc(it.sku)}"></div>
+      <div><input data-k="product_id" class="mono" placeholder="product_id (24 hex)" value="${esc(it.product_id)}"${it.product_id&&!isHexId(it.product_id.trim())?' style="border-color:var(--warn)"':''}></div>
+      <div style="flex:2 1 240px"><input data-k="product_url" placeholder="product_url https://…" value="${esc(it.product_url)}"></div>
+      <div class="act" style="display:flex;gap:4px">
+        <button class="sm ghost" data-a="ov">${it.open?'▾':'▸'} overrides${(it.input+it.parameters).trim()?' •':''}</button>
+        <button class="sm ghost" data-a="dup" title="duplicate">⧉</button>
+        <button class="sm ghost" data-a="del" title="remove">✕</button></div>
+    </div>
+    ${it.open?`<div class="split" style="margin-top:8px">
+      <div class="fld"><label>input override <span class="ty">object</span>
+          <button type="button" class="sm ghost" data-a="tpl" style="float:right;padding:1px 7px;font-size:11px">manual product</button>
+          <button type="button" class="sm ghost" data-a="img" style="float:right;padding:1px 7px;font-size:11px;margin-right:4px">📎 + product_images</button></label>
+        <textarea data-k="input" rows="5" placeholder='{ "product_name": "Desk lamp", "product_images": ["https://…"] }'>${esc(it.input)}</textarea></div>
+      <div class="fld"><label>parameters override <span class="ty">object</span></label>
+        <textarea data-k="parameters" rows="5" placeholder='{ "style": "Cinematic" }'>${esc(it.parameters)}</textarea></div>
+    </div>`:''}
+  </div>`).join('');
+  bkMeta();
+}
+$('#bkItems').addEventListener('input', e=>{
+  const row = e.target.closest('.bk-it'), k = e.target.dataset.k; if(!row||!k) return;
+  BK[row.dataset.i][k] = e.target.value;
+  if(k==='product_id') e.target.style.borderColor = !e.target.value.trim()||isHexId(e.target.value.trim()) ? '' : 'var(--warn)';
+});
+$('#bkItems').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-a]'); if(!b) return;
+  const i = Number(b.closest('.bk-it').dataset.i), it = BK[i];
+  const obj = ()=>{ try{ return it.input.trim()?JSON.parse(it.input):{}; }catch(_){ alert('Fix the input override JSON first.'); return null; } };
+  if(b.dataset.a==='del'){ BK.splice(i,1); if(!BK.length) BK.push(blankItem()); }
+  else if(b.dataset.a==='dup') BK.splice(i+1,0,{...it});
+  else if(b.dataset.a==='ov') it.open = !it.open;
+  else if(b.dataset.a==='tpl'){ const o = obj(); if(!o) return; it.input = JSON.stringify({product_name:'', product_description:'', product_images:[], ...o},null,2); }
+  else if(b.dataset.a==='img'){ const o = obj(); if(!o) return; const f = chooseFile(); if(!f) return;
+    o.product_images = [...(Array.isArray(o.product_images)?o.product_images:[]), f.id]; it.input = JSON.stringify(o,null,2); }
+  renderBkItems();
+});
+$('#bkAdd').onclick = ()=>{ BK.push(blankItem()); renderBkItems(); };
+$('#bkClearItems').onclick = ()=>{ if(BK.some(itemUsed) && !confirm('Remove all items?')) return; BK=[blankItem()]; renderBkItems(); };
+$('#bkPasteAdd').onclick = ()=>{
+  const lines = $('#bkPaste').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return;
+  BK = BK.filter(itemUsed);
+  lines.forEach(l=>{
+    // "SKU, ref": split on the first separator only, so a URL may keep its own commas
+    let sku = '', ref = l;
+    const m = l.match(/^([^,;\t]*?)\s*[,;\t]\s*(.+)$/);
+    if(m && !/^https?:\/\//i.test(m[1])){ sku = m[1].trim(); ref = m[2].trim(); }
+    const it = blankItem(); it.sku = sku;
+    if(isHexId(ref)) it.product_id = ref; else it.product_url = ref;
+    BK.push(it);
+  });
+  $('#bkPaste').value = ''; renderBkItems();
+};
+
+function parseObj(txt, where){
+  if(!txt.trim()) return undefined;
+  let o; try{ o = JSON.parse(txt); }catch(e){ throw new Error(`${where}: invalid JSON (${e.message})`); }
+  if(!o || typeof o!=='object' || Array.isArray(o)) throw new Error(`${where}: must be a JSON object`);
+  return o;
+}
+function bkBody(){
+  const b = { name: $('#bkName').value.trim() };
+  const mc = $('#bkMax').value.trim(); if(mc!=='') b.max_credits = Number(mc);
+  if($('#bkTest').checked) b.test_count = 5;
+  const inp = collectForm($('#bkInput')); if(Object.keys(inp).length) b.input = inp;
+  const par = collectForm($('#bkParams')); if(Object.keys(par).length) b.parameters = par;
+  // rows left completely blank are skipped; send a literal {} item from the Raw JSON tab
+  b.items = [];
+  BK.forEach((it,i)=>{
+    if(!itemUsed(it)) return;
+    const o = {};
+    if(it.sku.trim()) o.sku = it.sku.trim();
+    if(it.product_id.trim()) o.product_id = it.product_id.trim();
+    if(it.product_url.trim()) o.product_url = it.product_url.trim();
+    const io = parseObj(it.input, `item #${i} input`); if(io) o.input = io;
+    const po = parseObj(it.parameters, `item #${i} parameters`); if(po) o.parameters = po;
+    b.items.push(o);
+  });
+  return b;
+}
+const bkJsonMode = ()=>$('#bkJsonWrap').style.display==='';
+function bkMeta(){
+  const n = BK.filter(itemUsed).length, c = $('#bkCount');
+  c.textContent = `(${n} / ${BK_MAX_ITEMS})`; c.style.color = n>BK_MAX_ITEMS?'var(--err)':'';
+  let size = null;
+  try{ size = new Blob([bkJsonMode() ? $('#bkJson').value : JSON.stringify(bkBody())]).size; }catch(e){}
+  const s = $('#bkSize');
+  s.textContent = size===null ? 'invalid JSON in a field' : `${fmtBytes(size)} / 1 MiB`;
+  s.className = 'chip'+(size===null||size>BK_MAX_BODY?' err':'');
+}
+let bkMetaT; $('#p-bulk').addEventListener('input', ()=>{ clearTimeout(bkMetaT); bkMetaT = setTimeout(bkMeta, 250); });
+$('#p-bulk').addEventListener('change', ()=>bkMeta());
+$$('[data-bktab]').forEach(b=>b.onclick=()=>{
+  const json = b.dataset.bktab==='json';
+  if(json){ try{ $('#bkJson').value = JSON.stringify(bkBody(),null,2); }catch(e){ $('#bkOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; } }
+  $$('[data-bktab]').forEach(x=>x.classList.toggle('on', x===b));
+  $('#bkJsonWrap').style.display = json?'':'none';
+  $('#bkFormWrap').style.display = $('#bkHead').style.display = json?'none':'';
+  bkMeta();
+});
+$('#bkExample').onclick = ()=>{
+  const set = (id,v)=>{ const el = document.getElementById(id); if(el) el.value = v; };
+  $('#bkName').value = 'Autumn catalogue'; $('#bkMax').value = 500; $('#bkTest').checked = false;
+  set('bkin__prompt', 'Show three benefits of this product in a calm reveal');
+  set('bkpa__duration', 8); set('bkpa__aspect_ratio', '9:16'); set('bkpa__quality', '720p');
+  BK = [{...blankItem(), sku:'MUG-01', product_id:'0123456789abcdef01234567'},
+        {...blankItem(), sku:'BAG-02', product_url:'https://shop.example/products/bag?variant=blue'},
+        {...blankItem(), sku:'LAMP-03', open:true,
+          input: JSON.stringify({product_name:'Desk lamp', product_description:'Adjustable warm light', product_images:['https://shop.example/lamp.jpg']},null,2),
+          parameters: JSON.stringify({style:'Cinematic'},null,2)}];
+  $('#bkIdem').value = 'autumn-catalogue-'+Date.now().toString(36);
+  renderBkItems();
+  if(bkJsonMode()) $('#bkJson').value = JSON.stringify(bkBody(),null,2);
+  $('#bkOut').innerHTML = `<div class="notice" style="margin:0">The docs example is loaded. The <code>product_id</code> and the <code>shop.example</code> links are placeholders, so replace them with your own. If you send them as they are, those items fail on their own while the batch carries on, which is also a valid test.</div>`;
+};
+$('#bkIdemGen').onclick = ()=> $('#bkIdem').value = 'batch-'+Date.now().toString(36);
+$('#bkSend').onclick = async ()=>{
+  let body;
+  try{ body = bkJsonMode() ? JSON.parse($('#bkJson').value) : bkBody(); }
+  catch(e){ $('#bkOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; }
+  if(!$('#bkIdem').value.trim()) $('#bkIdemGen').click();
+  $('#bkOut').innerHTML = '<span class="spin"></span> sending…';
+  const r = await api('POST','/studio/batches',{body, idem:$('#bkIdem').value.trim()});
+  const id = r.ok && r.json && r.json.batch_id;
+  $('#bkOut').innerHTML = (id ? `<div style="margin-bottom:8px"><button class="primary sm" id="bkTrack">Track ${esc(id)} →</button></div>` : '') + resultBox(r);
+  if(id){ setBatch(r.json); $('#bkTrack').onclick = ()=>showPanel('batches'); if(blLoaded) loadBatchList(); }
+};
+renderBkItems();
+
+/* ═══════════ STUDIO BULK — batches & progress ═══════════ */
+const errText = r=>(r.json&&r.json.error) ? `${r.json.error.code}: ${r.json.error.message}` : `HTTP ${r.status||'ERR'} ${String(r.text||'').slice(0,200)}`;
+const fmtDate = d=>{ if(!d) return ''; const t = new Date(d); return isNaN(t) ? String(d) : t.toLocaleString(); };
+const clampInt = (el,min,max,def)=>{ const n = parseInt(el.value,10); const v = Math.min(max, Math.max(min, isNaN(n)?def:n)); el.value = v; return v; };
+let blLoaded = false;
+async function loadBatchList(){
+  const off = clampInt($('#blOff'),0,1e9,0), lim = clampInt($('#blLim'),1,100,50);
+  $('#blList').innerHTML = '<div class="item muted"><span class="spin"></span> loading…</div>';
+  const r = await api('GET', `/studio/batches?offset=${off}&limit=${lim}`);
+  if(!r.ok){ $('#blList').innerHTML = `<div class="item"><div class="err-box">${esc(errText(r))}</div></div>`; return; }
+  blLoaded = true;
+  const list = (r.json && r.json.batches) || [];
+  $('#blCount').textContent = `(${list.length}${list.length===lim?'+':''})`;
+  $('#blList').innerHTML = list.length ? list.map(b=>`<div class="item" data-bid="${esc(b.batch_id)}" style="cursor:pointer">
+      <div class="t"><b>${esc(b.name||b.batch_id)}</b><small>${esc(b.batch_id)} · max ${esc(b.max_credits??'—')} · ${esc(fmtDate(b.created_at))}</small></div>
+      <span class="badge ${esc(b.status)}">${esc(b.status)}</span></div>`).join('')
+    : '<div class="item muted">no batches on this page</div>';
+  $('#blList').querySelectorAll('[data-bid]').forEach(el=>el.onclick=()=>openBatch(el.dataset.bid));
+}
+$('#blLoad').onclick = loadBatchList;
+
+const WAIT_HELP = {
+  TEST_REVIEW_REQUIRED: 'The 5-item sample has settled. Review its results below, then press Resume to run the remaining items, or Cancel.',
+  INSUFFICIENT_CREDITS: 'The account ran out of credits, so new starts are paused. Top up and press Resume. Adding credits does not resume a batch by itself.',
+  BUDGET_EXCEEDED: 'max_credits is used up (spent plus held credits). Resume with a higher max_credits to continue.',
+  RATE_LIMIT_EXCEEDED: 'New starts hit a rate limit and were paused. Press Resume to continue.'
+};
+const ERR_HELP = {
+  BATCH_ITEMS_ACTIVE: 'A selected item is still queued, admitted or processing, a retry_failed item did not fail, or another retry was just accepted. For restart, cancel pending work and wait for admitted attempts to finish.',
+  GENERATION_UNRESOLVED: 'An earlier generation request for a selected item is still queued, running, dispatching or uncertain. Wait for it to reconcile before creating another paid attempt.',
+  NO_FAILED_ITEMS: 'No item’s latest attempt failed, so there is nothing to retry. To remake specific items, use rework.',
+  BATCH_HISTORY_LIMIT: 'The batch already keeps 100 version-creating operations or 8 MiB of changes. Create a new batch.',
+  IDEMPOTENCY_CONFLICT: 'This key was already used on this batch with a different body. Use a new key for a new operation. Reuse a key only to replay the identical request.',
+  BATCH_CONFLICT: 'The batch changed at the same moment. Refresh it and send again with the same key.',
+  BATCH_CANCELLED: 'A cancelled batch can’t resume. It can still restart, or rework terminal items.',
+  IMPORT_FAILED: 'Product import failed before paid admission, so no credits were held. The message names the reason when it is known. Fix the source (owned product_id, or product data and images in input), then retry_failed or rework.',
+  PREPARATION_FAILED: 'Generation preparation failed after the import. Report the task_id.',
+  DIRECTOR_REQUEST_FAILED: 'The AI Director text request was rejected before a video brief existed. This is not a video-provider failure. Report the task_id.',
+  REFERENCE_MEDIA_UNAVAILABLE: 'A Director reference image could not be read, is unsupported, or is too large.'
+};
+const errBox = (err, style)=>err ? `<div class="err-box"${style?` style="${style}"`:''}><b>${esc(err.code||'')}</b> — ${esc(err.message||'')}${ERR_HELP[err.code]?`<div style="margin-top:3px;font-size:11.5px;color:#d9a6a2">${esc(ERR_HELP[err.code])}</div>`:''}</div>` : '';
+const batchActive = b=>!!b && (b.status==='running' || (b.counts && b.counts.processing>0));
+function openBatch(id){ $('#bdId').value = id; $('#bdOff').value = 0; fetchBatch(); }
+function setBatch(j){
+  S.batchId = j.batch_id; S.batch = j; S.batchErr = null; S.bdKey = '';
+  $('#bdId').value = j.batch_id; $('#bdOff').value = j.offset||0; $('#bdLim').value = j.limit||50;
+  save(); renderBatch();
+}
+let bdInflight = null;
+async function fetchBatch(mode){
+  if(bdInflight){ if(mode==='poll') return; await bdInflight.catch(()=>{}); }
+  bdInflight = (async ()=>{
+    const id = $('#bdId').value.trim() || S.batchId; if(!id) return;
+    const off = clampInt($('#bdOff'),0,1e9,0), lim = clampInt($('#bdLim'),1,100,50);
+    if(S.batch && S.batch.batch_id!==id){ S.batch = null; S.bdKey = ''; }
+    if(!S.batch && mode!=='poll'){ $('#bdEmpty').style.display=''; $('#bdWrap').style.display='none'; $('#bdEmpty').innerHTML = '<div class="card"><span class="spin"></span> loading…</div>'; }
+    const r = await api('GET', `/studio/batches/${encodeURIComponent(id)}?offset=${off}&limit=${lim}`);
+    S.batchId = id; save();
+    if(r.ok && r.json){ S.batch = r.json; S.batchErr = null; } else S.batchErr = r;
+    renderBatch();
+  })();
+  try{ await bdInflight; } finally{ bdInflight = null; }
+}
+$('#bdGet').onclick = ()=>{ if($('#bdId').value.trim()) fetchBatch(); };
+$('#bdId').onkeydown = e=>{ if(e.key==='Enter') $('#bdGet').click(); };
+
+function renderBatch(){
+  const b = S.batch;
+  $('#batchchip').textContent = b ? `(${b.status})` : '';
+  if(!b){
+    $('#bdWrap').style.display = 'none'; $('#bdEmpty').style.display = '';
+    $('#bdEmpty').innerHTML = S.batchErr ? `<div class="card">${resultBox(S.batchErr)}</div>` : '<div class="card muted">no batch open yet. Create one, or pick one from the list.</div>';
+    return;
+  }
+  $('#bdEmpty').style.display = 'none'; $('#bdWrap').style.display = '';
+  const c = b.counts||{}, total = b.total_items||0;
+  const settled = (c.completed||0)+(c.failed||0)+(c.cancelled||0);
+  const created = Object.values(c).reduce((a,n)=>a+n,0);
+  const seg = (n,col,label)=>n?`<i style="width:${(n/Math.max(total,1)*100).toFixed(2)}%;background:${col}" title="${label}: ${n}"></i>`:'';
+  const mx = Number(b.max_credits)||0, used = Number(b.credits_used)||0, com = Number(b.credits_committed)||0;
+  const pct = n=>mx ? Math.min(100, Math.max(0,n)/mx*100).toFixed(2)+'%' : '0%';
+  const live = batchActive(b) && $('#bdPoll').checked;
+  $('#bdHead').innerHTML = `<h3 style="flex-wrap:wrap">${esc(b.name||'')} <span class="badge ${esc(b.status)}">${esc(b.status)}</span>
+      ${b.waiting_reason?`<span class="chip ${b.waiting_reason==='TEST_REVIEW_REQUIRED'?'warn':'err'}">${esc(b.waiting_reason)}</span>`:''}
+      <span class="mono muted" style="font-size:12px;font-weight:400">${esc(b.batch_id)}</span>
+      <button class="sm ghost" data-bd="copy">copy id</button>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center;font-weight:400">
+        ${live?'<span class="muted" style="font-size:11.5px"><span class="spin"></span> live</span>':''}
+        <button class="sm ghost" data-bd="refresh">↻ refresh</button></span></h3>
+    ${b.waiting_reason&&WAIT_HELP[b.waiting_reason]?`<div class="notice">${esc(WAIT_HELP[b.waiting_reason])}</div>`:''}
+    ${S.batchErr?`<div class="err-box" style="margin-bottom:10px">Last refresh failed: ${esc(errText(S.batchErr))}</div>`:''}
+    <div style="margin-bottom:10px"><span class="tag"><b>total_items</b> ${esc(total)}</span><span class="tag"><b>test_count</b> ${esc(b.test_count||0)}</span>
+      ${b.created_at?`<span class="tag"><b>created</b> ${esc(fmtDate(b.created_at))}</span>`:''}
+      ${Object.entries(c).map(([k,n])=>`<span class="tag"><b>${esc(k)}</b> ${esc(n)}</span>`).join('')}</div>
+    <div style="font-size:12px;margin-bottom:4px"><b>Items</b> <span class="muted">${settled} of ${total} settled${total>created?` · ${total-created} without a task yet`:''}</span></div>
+    <div class="bar">${seg(c.completed,'var(--ok)','completed')}${seg(c.failed,'var(--err)','failed')}${seg(c.cancelled,'#7a3a37','cancelled')}${seg(c.processing,'var(--acc)','processing')}${seg(c.queued,'#3b4a5e','queued')}${seg(c.waiting_for_sample,'#5a4512','waiting_for_sample')}</div>
+    <div style="font-size:12px;margin:10px 0 4px"><b>Credits</b> <span class="muted">used ${esc(used)} (every version) · committed ${esc(com)} (spent + held) · budget ${esc(mx)}</span></div>
+    <div class="bar"><i style="width:${pct(Math.min(used,com||used))};background:var(--ok)" title="used"></i><i style="width:${pct(com-used)};background:var(--warn)" title="held"></i></div>`;
+  $('#bcPause').classList.toggle('primary', b.status==='running');
+  $('#bcResume').classList.toggle('primary', b.status==='paused');
+  $('#bcMax').placeholder = `max_credits ≥ ${mx}`; $('#bcMax').title = 'optional: raise the budget when resuming';
+  $('#bdRaw').textContent = JSON.stringify(b,null,2);
+  // repaint the item table only when something in it changed, so result videos keep playing between polls
+  const key = JSON.stringify([b.offset,b.limit,b.has_more,(b.items||[]).map(it=>[it.index,it.version,it.status,(it.attempts||[]).map(a=>[a.task_id,a.status,a.credits_used,a.error&&a.error.code,(a.results||[]).length])])]);
+  if(key!==S.bdKey){ S.bdKey = key; $('#bdItems').innerHTML = batchItemsHtml(b); }
+  raFailedHint();
+  $('#raReplay').disabled = !(RA.last && RA.last.batch===b.batch_id);
+}
+function attemptHtml(a, latestV, multi){
+  const res = (a.results||[]).map(r=>{
+    const u = esc(mediaSrc(r.url||''));
+    const prev = r.type==='image'?`<img src="${u}" loading="lazy">`
+      : r.type==='video'?`<video src="${u}" controls preload="metadata"></video>`
+      : r.type==='audio'?`<audio src="${u}" controls style="width:200px"></audio>`:'';
+    return `<div class="thumb">${prev}<a href="${u}" target="_blank" rel="noopener" style="font-size:11px">open</a> <span class="muted" style="font-size:11px">${fmtBytes(r.size)}</span></div>`;
+  }).join('');
+  const old = latestV!==undefined && a.version!==undefined && a.version!==latestV;
+  return `<div class="att"${old?' style="opacity:.62"':''}><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span class="mono" style="font-size:11.5px">${esc(a.task_id)}</span>
+      ${a.version!==undefined?`<span class="tag"><b>v</b>${esc(a.version)}</span>`:''}
+      ${old?'<span class="muted" style="font-size:11px">earlier version</span>':multi?'<span class="muted" style="font-size:11px;color:var(--acc)">latest</span>':''}
+      <span class="badge ${esc(a.status)}">${esc(a.status)}</span>
+      ${a.credits_reserved!==undefined?`<span class="tag"><b>reserved</b> ${esc(a.credits_reserved)}</span>`:''}
+      ${a.credits_used!==undefined?`<span class="tag"><b>used</b> ${esc(a.credits_used)}</span>`:''}
+      <button class="sm ghost" data-task="${esc(a.task_id)}" title="open in Tasks (renews signed links)">→ Tasks</button></div>
+    ${errBox(a.error, 'margin-top:4px;padding:5px 8px')}
+    ${res?`<div class="media" style="margin-top:4px">${res}</div>`:''}</div>`;
+}
+const TERMINAL = ['completed','failed','cancelled'];
+function batchItemsHtml(b){
+  const items = b.items||[], from = b.offset||0;
+  const range = items.length ? `${from}–${from+items.length-1}` : '—';
+  return `<h3>Items <span class="muted" style="font-weight:400">${range} of ${esc(b.total_items)}</span>
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <button class="sm ghost" data-page="-1"${from<=0?' disabled':''}>← prev</button>
+        <button class="sm ghost" data-page="1"${b.has_more?'':' disabled'}>next →</button></span></h3>
+    ${items.length ? `<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>sku / product_url</th><th>status · version</th><th>attempts <span style="text-transform:none;letter-spacing:0;font-weight:400">newest first</span></th></tr></thead><tbody>
+      ${items.map(it=>{
+        const atts = (it.attempts||[]).slice().sort((x,y)=>(y.version||0)-(x.version||0));
+        // a new version reports queued before the worker creates its task
+        const pending = it.version!==undefined && atts.length && !atts.some(a=>a.version===it.version);
+        return `<tr><td class="mono" style="vertical-align:top">${esc(it.index)}</td>
+        <td style="vertical-align:top">${esc(it.sku||'')}${it.product_url?`<div class="mono muted" style="font-size:11px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(it.product_url)}">${esc(it.product_url)}</div>`:''}</td>
+        <td style="vertical-align:top;white-space:nowrap"><span class="badge ${esc(it.status)}">${esc(it.status)}</span>${it.version!==undefined?` <span class="tag"><b>v</b>${esc(it.version)}</span>`:''}
+          <div style="margin-top:6px;display:flex;gap:4px">${it.status==='failed'?`<button class="sm ghost" data-ri="${esc(it.index)}" title="add to retry_failed item_indexes">↻ retry</button>`:''}${TERMINAL.includes(it.status)?`<button class="sm ghost" data-rw="${esc(it.index)}" title="add to a rework">✎ rework</button>`:''}</div></td>
+        <td>${pending?`<div class="att muted" style="font-size:12px"><span class="tag"><b>v</b>${esc(it.version)}</span> ${esc(it.status)}. Its task appears on the next worker tick.</div>`:''}
+          ${atts.length ? atts.map(a=>attemptHtml(a, it.version, atts.length>1 || pending)).join('') : '<span class="muted" style="font-size:12px">no attempt yet</span>'}</td></tr>`;
+      }).join('')}
+    </tbody></table></div>` : '<div class="muted">no items on this page</div>'}`;
+}
+$('#bdWrap').addEventListener('click', e=>{
+  const el = e.target.closest('button'); if(!el || !S.batch) return;
+  if(el.dataset.ctl) return controlBatch(el.dataset.ctl);
+  if(el.dataset.ri!==undefined) return raPick('retry_failed', [el.dataset.ri]);
+  if(el.dataset.rw!==undefined) return raPick('rework', [el.dataset.rw]);
+  if('rafill' in el.dataset) return raPick('retry_failed', (S.batch.items||[]).filter(it=>it.status==='failed').map(it=>String(it.index)));
+  if(el.dataset.bd==='copy'){ navigator.clipboard.writeText(S.batch.batch_id); el.textContent='copied'; setTimeout(()=>el.textContent='copy id',1200); return; }
+  if(el.dataset.bd==='refresh') return fetchBatch();
+  if(el.dataset.page){
+    const lim = clampInt($('#bdLim'),1,100,50);
+    $('#bdOff').value = Math.max(0, (S.batch.offset||0) + Number(el.dataset.page)*lim);
+    return fetchBatch();
+  }
+  if(el.dataset.task){
+    const a = (S.batch.items||[]).flatMap(it=>it.attempts||[]).find(x=>x.task_id===el.dataset.task); if(!a) return;
+    const i = S.tasks.findIndex(t=>t.task_id===a.task_id);
+    if(i>=0) S.tasks[i] = {...S.tasks[i], ...a}; else S.tasks.unshift({...a});
+    save(); renderTasks(); showPanel('tasks'); fetchTask(a.task_id, true);
+  }
+});
+async function controlBatch(action){
+  const b = S.batch; if(!b) return;
+  if(action==='cancel' && !confirm(`Cancel ${b.batch_id}?\n\nThe remaining items stop for good, and a cancelled batch cannot be resumed. Attempts that already started will finish.`)) return;
+  const body = {action};
+  if(action==='resume' && $('#bcMax').value.trim()!=='') body.max_credits = Number($('#bcMax').value);
+  $('#bcOut').innerHTML = `<span class="spin"></span> ${esc(action)}…`;
+  const r = await api('POST', `/studio/batches/${encodeURIComponent(b.batch_id)}`, {body});
+  const err = r.json && r.json.error;
+  $('#bcOut').innerHTML = `<div class="row" style="margin-bottom:6px"><div class="act"><span class="chip ${r.ok?'ok':'err'}">${esc(action)} → HTTP ${r.status||'ERR'}</span></div>
+      <div class="act"><span class="chip">${r.ms} ms</span></div><div class="act"><code class="muted">${esc(JSON.stringify(body))}</code></div></div>
+    ${errBox(err)}
+    <details style="margin-top:6px"><summary>response</summary><div class="out" style="margin-top:6px"><pre>${esc(pretty(r.text))}</pre></div></details>`;
+  if(r.ok){ if(action==='resume') $('#bcMax').value = ''; await fetchBatch(); if(blLoaded) loadBatchList(); }
+}
+/* ═══════════ STUDIO BULK — retry_failed / rework / restart ═══════════ */
+const RA_HELP = {
+  retry_failed: 'Creates a new version only for items whose latest attempt failed. Leave item_indexes empty to retry every failure. Optional input / parameters merge over each item’s previous request, which is useful after fixing a prompt or a setting.',
+  rework: 'Creates new versions for the items you list, including completed or cancelled ones, with optional corrections: another product_id / product_url, or input / parameters changes. Use it to fix one product without regenerating the others.',
+  restart: 'Reruns EVERY item as a new version, including the successful ones. All items must be terminal, so cancel pending work and wait for admitted attempts to finish first. Restart removes the 5-item sample gate.'
+};
+const RA_COMMON = ' Each new attempt is admitted against the cumulative max_credits, where earlier spending and current holds still count. Earlier attempts, results and spending stay in items[].attempts. Other pending items in the batch start too, but an existing sample gate stays until resume or restart.';
+const RA = {action:'retry_failed', rows:[], last:null};
+const blankRow = (index='')=>({index:String(index), product_id:'', product_url:'', input:'', parameters:'', open:false});
+const rowUsed = r=>(r.index+r.product_id+r.product_url+r.input+r.parameters).trim()!=='';
+const raJsonMode = ()=>$('#raJsonWrap').style.display==='';
+
+function parseIndexes(txt){
+  const out = [];
+  for(const part of txt.split(/[\s,;]+/).filter(Boolean)){
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    if(!m) throw new Error(`item_indexes: “${part}” is not an index or a range like 4-7`);
+    const a = Number(m[1]), z = m[2]!==undefined ? Number(m[2]) : a;
+    if(z<a || z-a>=BK_MAX_ITEMS) throw new Error(`item_indexes: bad range ${part}`);
+    for(let i=a;i<=z;i++) out.push(i);
+  }
+  return out;
+}
+function raBody(){
+  const b = {action: RA.action};
+  if(RA.action==='retry_failed'){ const ix = parseIndexes($('#raIdx').value); if(ix.length) b.item_indexes = ix; }
+  if(RA.action==='rework'){
+    b.items = [];
+    RA.rows.forEach((r,i)=>{
+      if(!rowUsed(r)) return;
+      if(String(r.index).trim()==='') throw new Error(`rework row ${i+1}: index is required`);
+      const o = {index: Number(r.index)};
+      if(r.product_id.trim()) o.product_id = r.product_id.trim();
+      if(r.product_url.trim()) o.product_url = r.product_url.trim();
+      const io = parseObj(r.input, `rework #${r.index} input`); if(io) o.input = io;
+      const po = parseObj(r.parameters, `rework #${r.index} parameters`); if(po) o.parameters = po;
+      b.items.push(o);
+    });
+  }
+  const inp = parseObj($('#raInput').value, 'input'); if(inp) b.input = inp;
+  const par = parseObj($('#raParams').value, 'parameters'); if(par) b.parameters = par;
+  const mc = $('#raMax').value.trim(); if(mc!=='') b.max_credits = Number(mc);
+  return b;
+}
+function raMeta(){
+  let size = null, act = RA.action;
+  try{ const txt = raJsonMode() ? $('#raJson').value : JSON.stringify(raBody()); size = new Blob([txt]).size; if(raJsonMode()) act = JSON.parse(txt).action || act; }catch(e){}
+  const c = $('#raSize');
+  c.textContent = size===null ? 'invalid input' : `${fmtBytes(size)} / 1 MiB`;
+  c.className = 'chip'+(size===null||size>BK_MAX_BODY?' err':'');
+  $('#raSend').textContent = 'Send '+act;
+}
+function renderRaRows(){
+  if(!RA.rows.length) RA.rows.push(blankRow());
+  const known = ix=>(S.batch&&S.batch.items||[]).find(it=>String(it.index)===String(ix).trim());
+  $('#raRows').innerHTML = RA.rows.map((r,i)=>{ const it = String(r.index).trim()!=='' && known(r.index); return `<div class="bk-it" data-i="${i}">
+    <div class="row">
+      <div class="narrow" style="flex-basis:90px"><input data-k="index" type="number" min="0" step="1" placeholder="index" value="${esc(r.index)}"></div>
+      <div><input data-k="product_id" class="mono" placeholder="product_id (keep)" value="${esc(r.product_id)}"></div>
+      <div style="flex:2 1 240px"><input data-k="product_url" placeholder="product_url (keep)" value="${esc(r.product_url)}"></div>
+      <div class="act" style="display:flex;gap:4px"><button class="sm ghost" data-a="ov">${r.open?'▾':'▸'} input / parameters${(r.input+r.parameters).trim()?' •':''}</button><button class="sm ghost" data-a="del" title="remove">✕</button></div>
+    </div>
+    ${it?`<div class="mono muted" style="font-size:11px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">now: ${esc(it.sku||'—')} · ${esc(it.product_url||'no product_url')} · v${esc(it.version??'?')} ${esc(it.status)}</div>`:''}
+    ${r.open?`<div class="split" style="margin-top:8px">
+      <div class="fld"><label>input <span class="ty">object</span></label><textarea data-k="input" rows="4" placeholder='{ "prompt": "A slow close-up of the bag and its details." }'>${esc(r.input)}</textarea></div>
+      <div class="fld"><label>parameters <span class="ty">object</span></label><textarea data-k="parameters" rows="4" placeholder='{ "duration": 8 }'>${esc(r.parameters)}</textarea></div></div>`:''}
+  </div>`; }).join('');
+  raMeta();
+}
+$('#raRows').addEventListener('input', e=>{
+  const row = e.target.closest('.bk-it'), k = e.target.dataset.k; if(!row||!k) return;
+  RA.rows[row.dataset.i][k] = e.target.value;
+});
+$('#raRows').addEventListener('change', e=>{ if(e.target.dataset.k==='index') renderRaRows(); });
+$('#raRows').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-a]'); if(!btn) return;
+  const i = Number(btn.closest('.bk-it').dataset.i);
+  if(btn.dataset.a==='del') RA.rows.splice(i,1);
+  else if(btn.dataset.a==='ov') RA.rows[i].open = !RA.rows[i].open;
+  renderRaRows();
+});
+$('#raAddRow').onclick = ()=>{ RA.rows.push(blankRow()); renderRaRows(); };
+function setRaAction(a){
+  RA.action = a;
+  $$('#raTabs [data-ra]').forEach(x=>x.classList.toggle('on', x.dataset.ra===a));
+  $('#raRetry').style.display = a==='retry_failed'?'':'none';
+  $('#raRework').style.display = a==='rework'?'':'none';
+  $('#raHelp').textContent = RA_HELP[a] + RA_COMMON;
+  if(a==='rework') renderRaRows();
+  if(raJsonMode()){ try{ $('#raJson').value = JSON.stringify(raBody(),null,2); }catch(e){ $('#raOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; } }
+  raMeta();
+}
+$$('#raTabs [data-ra]').forEach(b=>b.onclick=()=>setRaAction(b.dataset.ra));
+$$('[data-ramode]').forEach(b=>b.onclick=()=>{
+  const json = b.dataset.ramode==='json';
+  if(json){ try{ $('#raJson').value = JSON.stringify(raBody(),null,2); }catch(e){ $('#raOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; } }
+  $$('[data-ramode]').forEach(x=>x.classList.toggle('on', x===b));
+  $('#raJsonWrap').style.display = json?'':'none';
+  $('#raForm').style.display = json?'none':'';
+  raMeta();
+});
+// per-item shortcuts from the items table
+function raPick(action, indexes){
+  if(raJsonMode()) $('[data-ramode="form"]').click();
+  setRaAction(action);
+  if(action==='retry_failed'){
+    const cur = $('#raIdx').value.split(/[\s,;]+/).filter(Boolean);
+    indexes.forEach(ix=>{ if(!cur.includes(ix)) cur.push(ix); });
+    $('#raIdx').value = cur.join(', ');
+  } else {
+    indexes.forEach(ix=>{
+      if(RA.rows.some(r=>String(r.index).trim()===ix)) return;
+      const row = {...blankRow(ix), open:true}, blank = RA.rows.findIndex(r=>!rowUsed(r));
+      if(blank>=0) RA.rows[blank] = row; else RA.rows.push(row);
+    });
+    renderRaRows();
+  }
+  raMeta();
+  $('#raCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function raFailedHint(){
+  const b = S.batch; if(!b) return;
+  const onPage = (b.items||[]).filter(it=>it.status==='failed').map(it=>it.index);
+  $('#raFailed').innerHTML = `Empty = all ${esc((b.counts||{}).failed||0)} failed item(s) in the batch (counts.failed).`
+    + (onPage.length ? ` Failed on this page: <span class="mono">${esc(onPage.join(', '))}</span> <button class="sm ghost" data-rafill style="padding:0 6px;font-size:11px">use these</button>` : '');
+}
+let raMetaT; $('#raCard').addEventListener('input', ()=>{ clearTimeout(raMetaT); raMetaT = setTimeout(raMeta, 250); });
+$('#raIdemGen').onclick = ()=> $('#raIdem').value = `${RA.action}-${Date.now().toString(36)}`;
+async function raSend(replay){
+  const b = S.batch; if(!b) return;
+  let body, key;
+  if(replay){
+    if(!RA.last || RA.last.batch!==b.batch_id) return;
+    ({body, key} = RA.last);
+  } else {
+    try{ body = raJsonMode() ? JSON.parse($('#raJson').value) : raBody(); }
+    catch(e){ $('#raOut').innerHTML = `<div class="err-box">${esc(e.message)}</div>`; return; }
+    if(body && body.action==='restart' && !confirm(`Restart ${b.batch_id}?\n\nEvery item (${b.total_items}) gets a new paid attempt, including the ones that already succeeded. Earlier results and spending stay.`)) return;
+    if(!$('#raIdem').value.trim()) $('#raIdemGen').click();
+    key = $('#raIdem').value.trim();
+  }
+  const action = (body && body.action) || '?', tag = replay ? ' replay' : '';
+  $('#raOut').innerHTML = `<span class="spin"></span> ${esc(action+tag)}…`;
+  const r = await api('POST', `/studio/batches/${encodeURIComponent(b.batch_id)}`, {body, idem:key});
+  const unknown = r.status===0 || r.status>=500;
+  $('#raOut').innerHTML = `<div class="row" style="margin-bottom:6px">
+      <div class="act"><span class="chip ${r.ok?'ok':'err'}">${esc(action+tag)} → HTTP ${r.status||'ERR'}</span></div>
+      <div class="act"><span class="chip">${r.ms} ms</span></div>
+      <div class="act"><span class="chip mono" title="Idempotency-Key">key ${esc(key)}</span></div></div>
+    ${r.ok&&replay?'<div class="notice" style="margin-bottom:6px">Replayed with the same key and body. The batch came back as it was, with no extra attempts.</div>':''}
+    ${unknown?'<div class="notice" style="margin-bottom:6px">No definite answer. The key stays in the field, so sending the same body again is safe and won’t start a second operation.</div>':''}
+    ${errBox(r.json && r.json.error)}
+    <details style="margin-top:6px"><summary>request body</summary><div class="out" style="margin-top:6px"><pre>${esc(JSON.stringify(body,null,2))}</pre></div></details>
+    <details style="margin-top:6px"><summary>response</summary><div class="out" style="margin-top:6px"><pre>${esc(pretty(r.text))}</pre></div></details>`;
+  if(r.ok){
+    if(!replay){ RA.last = {batch:b.batch_id, key, body}; $('#raIdem').value = ''; }
+    await fetchBatch(); if(blLoaded) loadBatchList();
+  }
+}
+$('#raSend').onclick = ()=>raSend(false);
+$('#raReplay').onclick = ()=>raSend(true);
+setRaAction('retry_failed');
+
+$('#bdPoll').onchange = renderBatch;
+setInterval(()=>{
+  if($('#bdPoll').checked && S.token && S.batchId && batchActive(S.batch)) fetchBatch('poll');
+}, 5000);
+
 /* ═══════════ FILES ═══════════ */
 async function upload(file){
   if(!file){ $('#upOut').innerHTML='<div class="err-box">No file selected.</div>'; return; }
@@ -702,6 +1334,7 @@ function renderTasks(){
           <button class="sm ghost" data-ti="${i}" data-a="drop">✕</button></span></h3>
       ${t.project_name?`<div style="margin:2px 0 6px;font-size:13px"><span class="muted" style="font-size:11px">project_name</span> <b>${esc(t.project_name)}</b></div>`:''}
       <div>${t.model?`<span class="tag"><b>model</b> ${esc(t.model)}</span>`:''}
+        ${t.batch_id?`<span class="tag"><b>batch</b> ${esc(t.batch_id)} · item ${esc(t.item_index)}${t.version!==undefined?' · v'+esc(t.version):''}</span>`:''}
         ${t.credits_reserved!==undefined?`<span class="tag"><b>reserved</b> ${esc(t.credits_reserved)}</span>`:''}
         ${t.credits_used!==undefined?`<span class="tag"><b>used</b> ${esc(t.credits_used)}</span>`:''}
         ${t.created_at?`<span class="tag"><b>created</b> ${esc(t.created_at)}</span>`:''}
@@ -794,6 +1427,7 @@ fetch('/__config').then(r=>r.json()).then(c=>{ if(c.base && !localStorage.getIte
   REDACT_MARK = c.redact_as||''; renderTasks(); }).catch(()=>{});
 hintBase();
 if(S.token && S.base) $('#check').click();
+if(S.batchId){ $('#bdId').value = S.batchId; if(S.token) fetchBatch(); }
 </script>
 </body>
 </html>

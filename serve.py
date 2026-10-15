@@ -120,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- proxy ----------
     def _proxy(self, path):
-        """/__api/<rest> -> <base>/<rest>, injecting the bearer token."""
+        """/__api/<rest>[?query] -> <base>/<rest>[?query], injecting the bearer token."""
         rest = unmask(path[len("/__api"):] or "/")
         base = self.headers.get("X-V4V-Base") or STATE["base"]
         url = base.rstrip("/") + rest
@@ -256,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/__media":
             return self._media()
         if p.startswith("/__api"):
-            return self._proxy(p)
+            return self._proxy(self.path)            # keep ?offset=&limit= for paged endpoints
         self._static(p)
 
     def do_DELETE(self):
@@ -282,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "redact": REDACT["enabled"],
                                     "redact_as": REDACT["as"] if REDACT["enabled"] else ""})
         if p.startswith("/__api"):
-            return self._proxy(p)
+            return self._proxy(self.path)
         self._send(404, {"error": "not found"})
 
     do_PUT = do_PATCH = do_POST
